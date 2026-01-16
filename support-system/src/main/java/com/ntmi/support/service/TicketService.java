@@ -1,12 +1,11 @@
 package com.ntmi.support.service;
 
+import com.ntmi.support.dto.TicketDTO;
 import com.ntmi.support.model.*;
 import com.ntmi.support.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate; // Import this!
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,100 +13,106 @@ import java.util.List;
 @Service
 public class TicketService {
 
-    @Autowired
-    private TicketRepository ticketRepository;
+    @Autowired private TicketRepository ticketRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private ErrorCategoryRepository categoryRepository;
+    @Autowired private ErrorTypeRepository typeRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private TicketImageRepository imageRepository;
-
-    @Autowired
-    private FileStorageService fileStorageService;
-
-    // --- NEW: The tool to push messages to Frontend ---
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate; 
-
+    // 1. Create Ticket
     @Transactional
-    public Ticket createTicket(Ticket ticket, Long userId, List<MultipartFile> files) {
+    public Ticket createTicket(TicketDTO dto, Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        Ticket ticket = new Ticket();
+        ticket.setSubject(dto.getSubject());
+        ticket.setDescription(dto.getDescription());
+        ticket.setPriority(dto.getPriority());
         ticket.setCreatedBy(user);
-        ticket.setBranch(user.getBranch());
-        ticket.setCreatedAt(LocalDateTime.now());
-        ticket.setStatus(TicketStatus.OPEN);
+        ticket.setBranch(user.getBranch()); 
+        ticket.setStatus(TicketStatus.OPEN); 
+        ticket.setCreatedAt(LocalDateTime.now()); 
+
+        if (dto.getCategoryId() != null) {
+            ErrorCategory cat = categoryRepository.findById(dto.getCategoryId()).orElse(null);
+            ticket.setErrorCategory(cat);
+        }
+        if (dto.getTypeId() != null) {
+            ErrorType type = typeRepository.findById(dto.getTypeId()).orElse(null);
+            ticket.setErrorType(type);
+        }
 
         Ticket savedTicket = ticketRepository.save(ticket);
         savedTicket.setTicketCode("TKT-" + savedTicket.getTicketId());
-        ticketRepository.save(savedTicket);
-
-        if (files != null && !files.isEmpty()) {
-            if (files.size() > 3) throw new RuntimeException("Max 3 images allowed!");
-            for (MultipartFile file : files) {
-                String fileName = fileStorageService.saveFile(file);
-                TicketImage image = new TicketImage();
-                image.setTicket(savedTicket);
-                image.setImageUrl(fileName);
-                imageRepository.save(image);
-            }
-        }
-
-        // --- NOTIFICATION LOGIC: Notify All Admins ---
-        // We send a message to "/topic/admin-notifications"
-        String message = "New Ticket (" + savedTicket.getTicketCode() + ") from " + user.getBranch().getBranchName();
-        messagingTemplate.convertAndSend("/topic/admin-notifications", message);
-
-        return savedTicket;
+        return ticketRepository.save(savedTicket);
     }
 
+    // 2. Cancel Ticket (Branch User)
+    public Ticket cancelTicket(Long ticketId, Long userId) {
+        System.out.println("Processing Cancel Request | Ticket: " + ticketId + " | User: " + userId);
+
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+        if (ticket.getCreatedBy() == null) throw new RuntimeException("Data Error: Ticket has no owner.");
+
+        if (!ticket.getCreatedBy().getUserId().equals(userId)) {
+            throw new RuntimeException("You do not have permission to cancel this ticket.");
+        }
+
+        if (ticket.getStatus() == TicketStatus.RESOLVED || ticket.getStatus() == TicketStatus.CLOSED) {
+            throw new RuntimeException("Cannot cancel a completed ticket.");
+        }
+
+        ticket.setStatus(TicketStatus.CANCELLED);
+        ticket.setClosedAt(LocalDateTime.now());
+        return ticketRepository.save(ticket);
+    }
+
+    // 3. Get All Tickets
+    public List<Ticket> getAllTickets() { return ticketRepository.findAll(); }
+    
+    // 4. Get Tickets by Branch
+    public List<Ticket> getTicketsByBranch(Long branchId) {
+        return ticketRepository.findByBranch_BranchIdAndStatusNot(branchId, TicketStatus.CANCELLED);
+    }
+
+    // 5. Start Ticket (Admin)
     public Ticket startTicket(Long ticketId, Long adminId) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found"));
-
-        if (ticket.getStatus() != TicketStatus.OPEN) {
-            throw new RuntimeException("Ticket is already taken or closed!");
-        }
-
+        
+        if (ticket.getStatus() != TicketStatus.OPEN) throw new RuntimeException("Ticket is busy/closed");
+        
         User admin = userRepository.findById(adminId)
-                .orElseThrow(() -> new RuntimeException("Admin user not found"));
-
+                .orElseThrow(() -> new RuntimeException("Admin not found"));
+        
         ticket.setStatus(TicketStatus.IN_PROGRESS);
         ticket.setAssignedAdmin(admin);
-        Ticket updatedTicket = ticketRepository.save(ticket);
-
-        // --- NOTIFICATION LOGIC: Notify Specific Branch User ---
-        // We send to "/topic/user/{userId}/notifications"
-        String message = "Your ticket " + ticket.getTicketCode() + " is now being processed by " + admin.getFullName();
-        String destination = "/topic/user/" + ticket.getCreatedBy().getUserId() + "/notifications";
-        messagingTemplate.convertAndSend(destination, message);
-
-        return updatedTicket;
+        return ticketRepository.save(ticket);
     }
 
+    // 6. Close Ticket (Admin)
     public Ticket closeTicket(Long ticketId, Long adminId) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found"));
-
-        if (ticket.getAssignedAdmin() == null || !ticket.getAssignedAdmin().getUserId().equals(adminId)) {
-            throw new RuntimeException("You cannot close this ticket!");
-        }
-
-        ticket.setStatus(TicketStatus.CLOSED);
+        
+        ticket.setStatus(TicketStatus.RESOLVED);
         ticket.setClosedAt(LocalDateTime.now());
-        Ticket updatedTicket = ticketRepository.save(ticket);
-
-        // --- NOTIFICATION LOGIC: Notify Specific Branch User ---
-        String message = "Ticket " + ticket.getTicketCode() + " has been resolved/closed.";
-        String destination = "/topic/user/" + ticket.getCreatedBy().getUserId() + "/notifications";
-        messagingTemplate.convertAndSend(destination, message);
-
-        return updatedTicket;
+        return ticketRepository.save(ticket);
     }
-    
-    public List<Ticket> getAllTickets() {
-        return ticketRepository.findAll();
+
+    // 7. Generic Update Status (The missing method!)
+    public Ticket updateStatus(Long ticketId, TicketStatus newStatus) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+        
+        ticket.setStatus(newStatus);
+        
+        if (newStatus == TicketStatus.CLOSED || newStatus == TicketStatus.RESOLVED || newStatus == TicketStatus.CANCELLED) {
+            ticket.setClosedAt(LocalDateTime.now());
+        }
+        
+        return ticketRepository.save(ticket);
     }
 }

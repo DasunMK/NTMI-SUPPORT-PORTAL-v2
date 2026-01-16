@@ -2,7 +2,6 @@ package com.ntmi.support.service;
 
 import com.ntmi.support.dto.DashboardStats;
 import com.ntmi.support.model.Ticket;
-import com.ntmi.support.model.TicketStatus;
 import com.ntmi.support.repository.TicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,21 +18,37 @@ public class DashboardService {
     @Autowired
     private TicketRepository ticketRepository;
 
-    public DashboardStats getBranchStats() {
+    // --- ADMIN DASHBOARD (Global Data) ---
+    public DashboardStats getAdminStats() {
+        return calculateStats(
+            ticketRepository.findAll(), 
+            ticketRepository.countByCreatedAtAfter(getStartOfDay()),
+            ticketRepository.countByClosedAtAfter(getStartOfDay()),
+            ticketRepository.countPastDueTickets(getTwoDaysAgo())
+        );
+    }
+
+    // --- BRANCH DASHBOARD (Specific Data) ---
+    public DashboardStats getBranchStats(Long branchId) {
+        return calculateStats(
+            ticketRepository.findByBranch_BranchId(branchId),
+            ticketRepository.countByBranch_BranchIdAndCreatedAtAfter(branchId, getStartOfDay()),
+            ticketRepository.countByBranch_BranchIdAndClosedAtAfter(branchId, getStartOfDay()),
+            ticketRepository.countPastDueTicketsByBranch(branchId, getTwoDaysAgo())
+        );
+    }
+
+    // --- SHARED LOGIC ---
+    private DashboardStats calculateStats(List<Ticket> tickets, long newToday, long closedToday, long pastDue) {
         DashboardStats stats = new DashboardStats();
-        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
-        LocalDateTime twoDaysAgo = LocalDateTime.now().minusHours(48);
-
+        
         // 1. Set Card Counts
-        stats.setNewTicketsToday(ticketRepository.countByCreatedAtAfter(todayStart));
-        stats.setClosedTicketsToday(ticketRepository.countByClosedAtAfter(todayStart));
-        stats.setPastDueTickets(ticketRepository.countPastDueTickets(twoDaysAgo));
+        stats.setNewTicketsToday(newToday);
+        stats.setClosedTicketsToday(closedToday);
+        stats.setPastDueTickets(pastDue);
 
-        // 2. Fetch ALL tickets to group them (Simple approach)
-        List<Ticket> allTickets = ticketRepository.findAll();
-
-        // 3. Category Distribution (Donut Chart)
-        Map<String, Long> catMap = allTickets.stream()
+        // 2. Category Distribution (Donut Chart)
+        Map<String, Long> catMap = tickets.stream()
             .filter(t -> t.getErrorCategory() != null)
             .collect(Collectors.groupingBy(t -> t.getErrorCategory().getCategoryName(), Collectors.counting()));
         
@@ -41,8 +56,8 @@ public class DashboardService {
         catMap.forEach((k, v) -> catList.add(new DashboardStats.LabelValue(k, v)));
         stats.setCategoryStats(catList);
 
-        // 4. Error Distribution (Bar Chart)
-        Map<String, Long> errorMap = allTickets.stream()
+        // 3. Error Distribution (Bar Chart)
+        Map<String, Long> errorMap = tickets.stream()
             .filter(t -> t.getErrorType() != null)
             .collect(Collectors.groupingBy(t -> t.getErrorType().getTypeName(), Collectors.counting()));
 
@@ -50,18 +65,17 @@ public class DashboardService {
         errorMap.forEach((k, v) -> errorList.add(new DashboardStats.LabelValue(k, v)));
         stats.setErrorStats(errorList);
 
-        // 5. Weekly Stats (Timeline)
-        // This is tricky. We'll simplify: just count tickets from last 7 days.
+        // 4. Weekly Stats (Timeline) - Last 7 Days
         List<DashboardStats.DailyStat> weeklyList = new ArrayList<>();
         for (int i = 6; i >= 0; i--) {
             LocalDate date = LocalDate.now().minusDays(i);
             String dayName = date.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
             
-            long total = allTickets.stream()
+            long total = tickets.stream()
                 .filter(t -> t.getCreatedAt().toLocalDate().equals(date))
                 .count();
                 
-            long closed = allTickets.stream()
+            long closed = tickets.stream()
                 .filter(t -> t.getClosedAt() != null && t.getClosedAt().toLocalDate().equals(date))
                 .count();
                 
@@ -70,5 +84,13 @@ public class DashboardService {
         stats.setWeeklyStats(weeklyList);
 
         return stats;
+    }
+
+    private LocalDateTime getStartOfDay() {
+        return LocalDate.now().atStartOfDay();
+    }
+
+    private LocalDateTime getTwoDaysAgo() {
+        return LocalDateTime.now().minusHours(48);
     }
 }

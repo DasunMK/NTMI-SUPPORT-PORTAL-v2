@@ -1,5 +1,6 @@
 package com.ntmi.support.controller;
 
+import com.ntmi.support.model.Branch;
 import com.ntmi.support.model.ErrorCategory;
 import com.ntmi.support.model.ErrorType;
 import com.ntmi.support.service.MasterDataService;
@@ -17,26 +18,40 @@ public class MasterDataController {
     @Autowired
     private MasterDataService service;
 
-    // 1. Add Category (e.g., "Hardware")
+    // --- BRANCHES ---
+    
+    // 1. Get All Branches (For Profile Filter & Dropdowns)
+    @GetMapping("/branches")
+    public List<Branch> getAllBranches() {
+        return service.getAllBranches();
+    }
+
+    // --- CATEGORIES ---
+
     @PostMapping("/categories")
     public ResponseEntity<ErrorCategory> createCategory(@RequestBody ErrorCategory category) {
         return ResponseEntity.ok(service.saveCategory(category));
     }
 
-    // 2. Get All Categories (For the first dropdown)
     @GetMapping("/categories")
     public List<ErrorCategory> getAllCategories() {
         return service.getAllCategories();
     }
 
-    // 3. Add Error Type (e.g., "Printer Jam" for Hardware)
+    // --- ERROR TYPES ---
+
     @PostMapping("/types")
     public ResponseEntity<ErrorType> createType(@RequestBody ErrorType type) {
         return ResponseEntity.ok(service.saveType(type));
     }
 
-    // 4. Get Types by Category ID (For the second dropdown)
-    // Example: /api/master-data/types/by-category/1
+    // 2. Get All Types (For Profile Filter)
+    @GetMapping("/types")
+    public List<ErrorType> getAllTypes() {
+        return service.getAllTypes();
+    }
+
+    // 3. Get Types by Category (For Create Ticket Dropdown)
     @GetMapping("/types/by-category/{categoryId}")
     public List<ErrorType> getTypesByCategory(@PathVariable Long categoryId) {
         return service.getTypesByCategoryId(categoryId);

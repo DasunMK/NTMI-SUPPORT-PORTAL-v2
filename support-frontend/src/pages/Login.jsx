@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Container, Box, TextField, Button, Typography, Card, CardContent } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api'; // Import our new helper
-import { jwtDecode } from "jwt-decode";
+import api from '../services/api'; 
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -11,23 +10,57 @@ const Login = () => {
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
-        e.preventDefault(); // Stop page refresh
+        e.preventDefault(); 
 
         try {
-            // 1. Send Login Request
             const response = await api.post('/auth/login', { username, password });
+            const data = response.data;
+            
+            console.log("Login Response:", data); // Keep this for debugging
 
-            // 2. Save Data to Local Storage (Browser Memory)
-            const { token, role, userId } = response.data;
+            // 1. Handle Token
+            const token = data.token || data.accessToken;
+            
+            // 2. Handle User Object (Backend might send flat data or nested 'user' object)
+            const userObj = data.user ? data.user : data;
+
+            // 3. Extract Basic Info
+            const role = userObj.role || (userObj.roles && userObj.roles[0]);
+            const userId = userObj.userId || userObj.id;
+            const usernameVal = userObj.username;
+
+            // 4. ⚠️ FIX: Extract Branch ID (Handle both Flat and Nested formats)
+            let branchId = null;
+            let branchName = null;
+
+            if (userObj.branchId) {
+                // Scenario A: Flat structure (What your logs show)
+                branchId = userObj.branchId;
+                branchName = userObj.branchName || 'My Branch';
+            } else if (userObj.branch) {
+                // Scenario B: Nested structure (Standard JPA)
+                branchId = userObj.branch.branchId;
+                branchName = userObj.branch.branchName;
+            }
+
+            if (!token || !role) {
+                throw new Error("Invalid response. Missing Token or Role.");
+            }
+
+            // 5. Save EVERYTHING to Local Storage
             localStorage.setItem('token', token);
             localStorage.setItem('role', role);
             localStorage.setItem('userId', userId);
-            localStorage.setItem('username', response.data.username);
+            localStorage.setItem('username', usernameVal);
 
-            // 3. Show Success & Redirect
-            toast.success(`Welcome back, ${username}!`);
+            if (branchId) {
+                localStorage.setItem('branchId', branchId);
+                localStorage.setItem('branchName', branchName);
+            }
+
+            // 6. Redirect
+            toast.success(`Welcome back, ${usernameVal}!`);
             
-            // Decode token just to be sure or use the role from response
             if (role === 'ADMIN') {
                 navigate('/admin-dashboard');
             } else {
@@ -36,10 +69,10 @@ const Login = () => {
 
         } catch (error) {
             console.error("Login Error:", error);
-            toast.error("Invalid Username or Password");
+            const errorMessage = error.response?.data?.message || "Invalid Username or Password";
+            toast.error(errorMessage);
         }
     };
-
     return (
         <Container maxWidth="xs">
             <Box 

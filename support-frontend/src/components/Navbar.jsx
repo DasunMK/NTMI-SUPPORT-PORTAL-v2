@@ -3,32 +3,36 @@ import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import LogoutIcon from '@mui/icons-material/Logout';
 
-const Navbar = () => {
+// Receive drawerWidth as a prop so it aligns perfectly
+const Navbar = ({ drawerWidth }) => {
     const navigate = useNavigate();
-    const username = localStorage.getItem('username') || 'User'; // We need to save username in Login first!
+    const username = localStorage.getItem('username') || 'User';
 
     const handleLogout = () => {
-        localStorage.clear(); // Wipe the data
-        navigate('/login');   // Go back to login
+        localStorage.clear();
+        navigate('/login');
     };
 
     return (
-        <AppBar position="static">
+        <AppBar 
+            position="fixed" 
+            sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }} // Ensures Navbar stays ON TOP of Sidebar
+        >
             <Toolbar>
                 <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-                    NTMI Support
+                    NTMI Support Portal
                 </Typography>
                 
                 <Box display="flex" alignItems="center" gap={2}>
-                    <Typography variant="body1">
-                        Hello, {username}
+                    <Typography variant="body2">
+                        {username}
                     </Typography>
                     <Button 
                         color="inherit" 
                         startIcon={<LogoutIcon />} 
                         onClick={handleLogout}
-                        variant="outlined"
-                        sx={{ borderColor: 'white' }}
+                        size="small"
+                        sx={{ textTransform: 'none', border: '1px solid rgba(255,255,255,0.3)' }}
                     >
                         Logout
                     </Button>

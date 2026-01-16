@@ -7,6 +7,7 @@ import java.util.List;
 
 @Repository
 public interface ErrorTypeRepository extends JpaRepository<ErrorType, Long> {
-    // Custom query to find types by their parent category ID
+    
+    // FIX: The method name must match the field "category" in ErrorType.java
     List<ErrorType> findByCategory_CategoryId(Long categoryId);
 }

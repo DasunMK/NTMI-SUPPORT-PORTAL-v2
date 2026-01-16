@@ -1,58 +1,86 @@
 package com.ntmi.support.controller;
 
-import com.ntmi.support.dto.LoginRequest;
-import com.ntmi.support.dto.LoginResponse;
+import com.ntmi.support.config.JwtUtils;
 import com.ntmi.support.model.User;
-import com.ntmi.support.repository.UserRepository;
-import com.ntmi.support.security.JwtUtils;
+import com.ntmi.support.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "*") // Allow requests from React
 public class AuthController {
 
     @Autowired
-    private UserRepository userRepository;
+    private AuthenticationManager authenticationManager;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    private UserService userService;
 
     @Autowired
     private JwtUtils jwtUtils;
 
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
-        // 1. Find User
-        Optional<User> userOptional = userRepository.findByUsername(loginRequest.getUsername());
-        
-        if (userOptional.isPresent()) {
-            User user = userOptional.get();
-
-            // 2. Check Password
-            if (passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
-                
-                // 3. Generate Token
-                String token = jwtUtils.generateToken(user);
-                
-                // 4. Return Response
-                Long branchId = (user.getBranch() != null) ? user.getBranch().getBranchId() : null;
-                
-                return ResponseEntity.ok(new LoginResponse(
-                        token,
-                        user.getUserId(),
-                        user.getUsername(),
-                        user.getRole().name(),
-                        branchId
-                ));
-            }
+    // --- ✅ NEW: REGISTER ENDPOINT (Fixes 404 Error) ---
+    @PostMapping("/register")
+    public ResponseEntity<?> registerUser(@RequestBody User user) {
+        try {
+            // The UserService already handles Password Encoding inside saveUser()
+            User savedUser = userService.saveUser(user);
+            return ResponseEntity.ok("User registered successfully with ID: " + savedUser.getUserId());
+        } catch (RuntimeException e) {
+            // Catch "Username already exists" errors
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Error registering user: " + e.getMessage());
         }
-        
-        return ResponseEntity.status(401).body("Invalid Username or Password");
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
+        String username = request.get("username");
+        String password = request.get("password");
+
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, password)
+            );
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String jwt = jwtUtils.generateToken(username);
+
+            Optional<User> userOp = userService.findByUsername(username);
+            
+            if (userOp.isPresent()) {
+                User user = userOp.get();
+                Map<String, Object> response = new HashMap<>();
+                response.put("token", jwt);
+                response.put("userId", user.getUserId());
+                response.put("username", user.getUsername());
+                response.put("fullName", user.getFullName());
+                response.put("role", user.getRole().name());
+                
+                if (user.getBranch() != null) {
+                    response.put("branchName", user.getBranch().getBranchName());
+                    response.put("branchId", user.getBranch().getBranchId());
+                } else {
+                    response.put("branchName", "Head Office");
+                    response.put("branchId", null);
+                }
+                return ResponseEntity.ok(response);
+            }
+            return ResponseEntity.badRequest().body("User not found");
+
+        } catch (Exception e) {
+            return ResponseEntity.status(403).body("Login Failed: " + e.getMessage());
+        }
     }
 }

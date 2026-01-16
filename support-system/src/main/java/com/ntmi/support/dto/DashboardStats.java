@@ -2,7 +2,6 @@ package com.ntmi.support.dto;
 
 import lombok.Data;
 import java.util.List;
-import java.util.Map;
 
 @Data
 public class DashboardStats {
@@ -11,12 +10,12 @@ public class DashboardStats {
     private long newTicketsToday;
     private long closedTicketsToday;
 
-    // Charts
-    private List<LabelValue> categoryStats; // For Donut Chart
-    private List<LabelValue> errorStats;    // For Bar Chart
-    private List<DailyStat> weeklyStats;    // For Timeline
+    // Charts data
+    private List<LabelValue> categoryStats; // Donut Chart
+    private List<LabelValue> errorStats;    // Bar Chart
+    private List<DailyStat> weeklyStats;    // Timeline
 
-    // Helper classes for the charts
+    // Helper classes for charts
     @Data
     public static class LabelValue {
         private String name;

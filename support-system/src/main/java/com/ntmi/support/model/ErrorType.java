@@ -16,6 +16,8 @@ public class ErrorType {
     private String typeName; // e.g., "Printer Jam", "No Internet"
 
     // Relationship: Many Types belong to One Category
+    // The field name here is "category".
+    // Therefore, your Repository MUST use: findByCategory_CategoryId(Long id)
     @ManyToOne
     @JoinColumn(name = "category_id", nullable = false)
     private ErrorCategory category;
