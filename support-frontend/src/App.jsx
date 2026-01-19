@@ -1,98 +1,63 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import Layout from './components/Layout';
+
+// --- PAGES ---
 import Login from './pages/Login';
 import BranchDashboard from './pages/BranchDashboard';
 import CreateTicket from './pages/CreateTicket';
 import Profile from './pages/Profile';
 import Help from './pages/Help';
-import Layout from './components/Layout';
+import AdminDashboard from './pages/AdminDashboard';
+import ManageUsers from './pages/ManageUsers'; 
+import Reports from './pages/Reports';// <--- IMPORT
+import Settings from './pages/Settings';
 
-// --- ADMIN PAGES ---
-// ⚠️ IMPORTANT: Ensure these files actually exist in this folder structure!
-// If you created AdminDashboard.jsx directly in 'pages', remove the '/admin' part below.
-import AdminDashboard from './pages/admin/AdminDashboard'; 
-import ManageUsers from './pages/admin/ManageUsers';
 
+// --- 1. Basic Protection ---
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   if (!token) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
+  return <Layout>{children}</Layout>;
+};
+
+// --- 2. Admin Protection ---
+const AdminRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+
+  if (!token) return <Navigate to="/login" replace />;
+  if (role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
+
   return <Layout>{children}</Layout>;
 };
 
 function App() {
   return (
     <Routes>
-      {/* Public Route */}
-      <Route path="/" element={<Navigate to="/login" />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       
-      {/* --- Protected Routes --- */}
+      {/* Branch Routes */}
+      <Route path="/dashboard" element={<ProtectedRoute><BranchDashboard /></ProtectedRoute>} />
+      <Route path="/create-ticket" element={<ProtectedRoute><CreateTicket /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
+     
+
+      {/* Admin Routes */}
+      <Route path="/admin-dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+
+       <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+
+        <Route path="/admin/Settings" element={<AdminRoute><Settings /></AdminRoute>} />
       
-      {/* 1. Branch / Standard User Routes */}
-      <Route 
-        path="/dashboard" 
-        element={
-          <ProtectedRoute>
-            <BranchDashboard />
-          </ProtectedRoute>
-        } 
-      />
-      
-      <Route 
-        path="/create-ticket" 
-        element={
-          <ProtectedRoute>
-            <CreateTicket />
-          </ProtectedRoute>
-        } 
-      />
+      {/* User Management Route */}
+      <Route path="/admin/users" element={<AdminRoute><ManageUsers /></AdminRoute>} /> 
 
-      <Route 
-        path="/profile" 
-        element={
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        } 
-      />
-
-      <Route 
-          path="/help" 
-          element={
-            <ProtectedRoute>
-              <Help />
-            </ProtectedRoute>
-          } 
-        />
-
-      {/* 2. Admin Routes */}
-      {/* 🛠️ FIX: Changed path from "/admin/dashboard" to "/admin-dashboard" to match Login redirect */}
-      <Route 
-        path="/admin-dashboard" 
-        element={
-          <ProtectedRoute>
-            <AdminDashboard />
-          </ProtectedRoute>
-        } 
-      />
-
-      <Route 
-        path="/admin/users" 
-        element={
-          <ProtectedRoute>
-            <ManageUsers />
-          </ProtectedRoute>
-        } 
-      />
-
-      <Route path="/admin/reports" element={<ProtectedRoute><h1>Admin Reports Page</h1></ProtectedRoute>} />
-      <Route path="/admin/settings" element={<ProtectedRoute><h1>Admin Settings Page</h1></ProtectedRoute>} />
-
-      {/* 3. Catch-All Route (Fixes blank screens for unknown URLs) */}
-      <Route path="*" element={<Navigate to="/login" />} />
-
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }

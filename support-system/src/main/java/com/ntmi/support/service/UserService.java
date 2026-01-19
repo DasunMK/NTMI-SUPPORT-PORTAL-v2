@@ -3,9 +3,9 @@ package com.ntmi.support.service;
 import com.ntmi.support.model.User;
 import com.ntmi.support.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.userdetails.UserDetails; // Import
-import org.springframework.security.core.userdetails.UserDetailsService; // Import
-import org.springframework.security.core.userdetails.UsernameNotFoundException; // Import
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-public class UserService implements UserDetailsService { // <--- 1. Implement this interface
+public class UserService implements UserDetailsService {
 
     @Autowired
     private UserRepository userRepository;
@@ -21,34 +21,57 @@ public class UserService implements UserDetailsService { // <--- 1. Implement th
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    // Save a new User
-    public User saveUser(User user) {
-        if (userRepository.existsByUsername(user.getUsername())) {
-            throw new RuntimeException("Username already exists!");
-        }
-        String encodedPassword = passwordEncoder.encode(user.getPassword());
-        user.setPassword(encodedPassword);
-        return userRepository.save(user);
+    // --- 1. Spring Security Login ---
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
 
-    // Get all users
+    // --- 2. CRUD Operations ---
+
     public List<User> getAllUsers() {
         return userRepository.findAll();
+    }
+
+    public Optional<User> findById(Long id) {
+        return userRepository.findById(id);
     }
 
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
-    // --- 2. ADD THIS CRITICAL METHOD ---
-    // This connects Spring Security to YOUR Database
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+    // CREATE (Admin)
+    public User createUser(User user) {
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new RuntimeException("Username already exists!");
+        }
+        // Encode password
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        return userRepository.save(user);
     }
 
-    public Optional<User> findById(Long id) {
-    return userRepository.findById(id);
-}
+    // UPDATE (Admin)
+    public User updateUser(Long id, User updatedInfo) {
+        User existing = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        existing.setFullName(updatedInfo.getFullName());
+        existing.setEmail(updatedInfo.getEmail());
+        existing.setRole(updatedInfo.getRole());
+        existing.setBranch(updatedInfo.getBranch());
+        
+        // Only update password if a new one is typed
+        if (updatedInfo.getPassword() != null && !updatedInfo.getPassword().isEmpty()) {
+            existing.setPassword(passwordEncoder.encode(updatedInfo.getPassword()));
+        }
+
+        return userRepository.save(existing);
+    }
+
+    // DELETE (Admin)
+    public void deleteUser(Long id) {
+        userRepository.deleteById(id);
+    }
 }

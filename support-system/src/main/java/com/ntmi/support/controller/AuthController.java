@@ -17,7 +17,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*") // Allow requests from React
+@CrossOrigin(origins = "*") 
 public class AuthController {
 
     @Autowired
@@ -29,12 +29,12 @@ public class AuthController {
     @Autowired
     private JwtUtils jwtUtils;
 
-    // --- ✅ NEW: REGISTER ENDPOINT (Fixes 404 Error) ---
+    // --- REGISTER ENDPOINT ---
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody User user) {
         try {
-            // The UserService already handles Password Encoding inside saveUser()
-            User savedUser = userService.saveUser(user);
+            // 🛠️ FIX: Changed 'saveUser' to 'createUser' to match UserService
+            User savedUser = userService.createUser(user);
             return ResponseEntity.ok("User registered successfully with ID: " + savedUser.getUserId());
         } catch (RuntimeException e) {
             // Catch "Username already exists" errors
