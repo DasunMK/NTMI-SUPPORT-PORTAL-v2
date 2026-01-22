@@ -1,21 +1,28 @@
 package com.ntmi.support.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 @Entity
-@Data
 @Table(name = "ticket_images")
+@Data
 public class TicketImage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long imageId;
+    private Long id; // ✅ Ensure this is 'id', not 'imageId'
 
-    // We store the URL/Path of the image, not the file itself in DB (Best Practice)
-    private String imageUrl; 
+    @Lob
+    @Column(columnDefinition = "VARCHAR(MAX)") // ✅ Correct for MSSQL
+    private String base64Data;
 
     @ManyToOne
     @JoinColumn(name = "ticket_id", nullable = false)
+    @JsonBackReference // ✅ Prevents infinite loop
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Ticket ticket;
 }

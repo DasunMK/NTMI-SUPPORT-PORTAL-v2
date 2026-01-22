@@ -4,7 +4,7 @@ import com.ntmi.support.filter.JwtAuthTokenFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod; // Import this!
+import org.springframework.http.HttpMethod; 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -33,25 +33,27 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // 1. PUBLIC ACCESS (No Login Required)
+                // 1. PUBLIC ACCESS
                 .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/master-data/**").permitAll() // For branch lists, etc.
+                .requestMatchers("/api/master-data/**").permitAll()
                 .requestMatchers("/error").permitAll()
+                .requestMatchers("/api/notifications/**").permitAll()
                 
-                // 2. ADMIN ONLY AREAS (Explicit Security)
-                .requestMatchers("/api/users/**").hasAuthority("ADMIN")
+                // 2. PROFILE & SELF SERVICE (✅ FIX: Allow any logged-in user)
+                .requestMatchers(HttpMethod.GET, "/api/users/{id}").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/users/{id}/password").authenticated()
+
+                // 3. ADMIN RESTRICTIONS
+                // Only Admin can see the full user list or create/delete users
+                .requestMatchers("/api/users/**").hasAuthority("ADMIN") 
                 .requestMatchers("/api/dashboard/admin").hasAuthority("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/tickets").hasAuthority("ADMIN") // Only Admin sees ALL tickets
+                .requestMatchers(HttpMethod.GET, "/api/tickets").hasAuthority("ADMIN") // 🛑 This was blocking Branch Users
 
-                // 3. SHARED / BRANCH USER ACCESS
-                // Allow ANY logged-in user to create a ticket
+                // 4. SHARED / BRANCH ACCESS
                 .requestMatchers(HttpMethod.POST, "/api/tickets").authenticated()
-                
-                // Allow users to see their specific branch data
                 .requestMatchers(HttpMethod.GET, "/api/tickets/branch/**").authenticated()
-                .requestMatchers(HttpMethod.GET, "/api/dashboard/branch/**").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/tickets/**").authenticated() // Allow cancel/update
 
-                // 4. CATCH ALL (Everything else requires login)
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthTokenFilter, UsernamePasswordAuthenticationFilter.class);

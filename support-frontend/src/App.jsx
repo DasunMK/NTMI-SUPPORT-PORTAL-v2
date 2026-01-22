@@ -10,9 +10,10 @@ import Profile from './pages/Profile';
 import Help from './pages/Help';
 import AdminDashboard from './pages/AdminDashboard';
 import ManageUsers from './pages/ManageUsers'; 
-import Reports from './pages/Reports';// <--- IMPORT
+import Reports from './pages/Reports';
 import Settings from './pages/Settings';
-
+import NotificationsPage from './pages/NotificationsPage'; // ✅ 1. Import New Page
+import { NotificationProvider } from './context/NotificationContext';
 
 // --- 1. Basic Protection ---
 const ProtectedRoute = ({ children }) => {
@@ -36,29 +37,33 @@ const AdminRoute = ({ children }) => {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<Login />} />
-      
-      {/* Branch Routes */}
-      <Route path="/dashboard" element={<ProtectedRoute><BranchDashboard /></ProtectedRoute>} />
-      <Route path="/create-ticket" element={<ProtectedRoute><CreateTicket /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-      <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
-     
+    <NotificationProvider>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login />} />
+        
+        {/* Help is Public */}
+        <Route path="/help" element={<Help />} />
 
-      {/* Admin Routes */}
-      <Route path="/admin-dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        {/* Branch / Shared Routes (Protected) */}
+        <Route path="/dashboard" element={<ProtectedRoute><BranchDashboard /></ProtectedRoute>} />
+        <Route path="/create-ticket" element={<ProtectedRoute><CreateTicket /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        
+        {/* ✅ 2. Add Notifications Route (Shared) */}
+        <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
-       <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        {/* Admin Routes */}
+        <Route path="/admin-dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        <Route path="/admin/settings" element={<AdminRoute><Settings /></AdminRoute>} />
+        <Route path="/admin/users" element={<AdminRoute><ManageUsers /></AdminRoute>} /> 
 
-        <Route path="/admin/Settings" element={<AdminRoute><Settings /></AdminRoute>} />
-      
-      {/* User Management Route */}
-      <Route path="/admin/users" element={<AdminRoute><ManageUsers /></AdminRoute>} /> 
-
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+        {/* Catch All */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </NotificationProvider>
   );
 }
 

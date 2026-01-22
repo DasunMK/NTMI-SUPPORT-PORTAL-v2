@@ -1,19 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Container, Typography, Box, Grid, Card, CardContent, Button, 
-    Accordion, AccordionSummary, AccordionDetails, Fade, Divider, Chip 
+    Accordion, AccordionSummary, AccordionDetails, Fade, Stack, Avatar, Paper
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import PhoneIcon from '@mui/icons-material/Phone';
-import EmailIcon from '@mui/icons-material/Email';
-import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
-import BugReportIcon from '@mui/icons-material/BugReport';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { useNavigate } from 'react-router-dom';
+import { 
+    ExpandMore, Phone, Email, LibraryBooks, 
+    BugReport, SupportAgent, LiveHelp, ChevronRight 
+} from '@mui/icons-material';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const Help = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Default to closed, or specific panel if passed from Login
     const [expanded, setExpanded] = useState(false);
+
+    // ✅ EFFECT: Check if we came from "Forgot Password"
+    useEffect(() => {
+        if (location.state && location.state.focus) {
+            setExpanded(location.state.focus);
+            
+            // Wait for render, then scroll
+            setTimeout(() => {
+                const element = document.getElementById(location.state.focus);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+        }
+    }, [location]);
 
     const handleChange = (panel) => (event, isExpanded) => {
         setExpanded(isExpanded ? panel : false);
@@ -23,139 +39,202 @@ const Help = () => {
         {
             id: 'panel1',
             question: "How do I reset my password?",
-            answer: "For security reasons, branch users cannot reset their own passwords. Please contact the IT Hotline at 011-2345678 to request a password reset."
+            answer: "For security reasons, branch users cannot reset their own passwords directly. Please contact the IT Hotline at 011-258-9999 to verify your identity and request a temporary password."
         },
         {
             id: 'panel2',
             question: "I uploaded the wrong screenshot. Can I delete it?",
-            answer: "Currently, once a ticket is submitted, you cannot edit it. Please raise a new ticket referencing the old one, or contact support if it's urgent."
+            answer: "To maintain an audit trail, tickets cannot be edited once submitted. Please raise a new ticket referencing the ID of the mistake, or add a comment to the existing ticket asking Admin to ignore the file."
         },
         {
             id: 'panel3',
             question: "What is the expected response time?",
-            answer: "For 'Critical' hardware issues, our team responds within 2 hours. For routine software requests, the standard response time is 24 hours."
+            answer: "We categorize response times by priority: 'Critical' (Hardware failure) issues are addressed within 2 hours. 'Medium' (Software/Access) requests are handled within 24 hours."
         },
         {
             id: 'panel4',
             question: "The system is running very slow.",
-            answer: "Please try clearing your browser cache (Ctrl + Shift + R). If the issue persists, check your branch internet connection before raising a ticket."
+            answer: "First, try clearing your browser cache (Ctrl + Shift + R). If the issue persists across multiple branch computers, it may be a network issue. Please check your router before raising a ticket."
         }
     ];
 
-    return (
-        <Fade in={true} timeout={800}>
-            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-                
-                {/* Header */}
-                <Box mb={4} textAlign="center">
-                    <Typography variant="h4" fontWeight="bold" gutterBottom color="primary">
-                        How can we help you?
+    const ContactCard = ({ icon, title, subtitle, detail, color, onClick }) => (
+        <Card 
+            elevation={0}
+            onClick={onClick}
+            sx={{ 
+                borderRadius: 4, 
+                border: '1px solid #f1f5f9',
+                transition: 'all 0.3s ease',
+                cursor: onClick ? 'pointer' : 'default',
+                '&:hover': { 
+                    transform: 'translateY(-4px)', 
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' 
+                } 
+            }}
+        >
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 3 }}>
+                <Avatar sx={{ bgcolor: `${color}15`, color: color, width: 56, height: 56 }}>
+                    {icon}
+                </Avatar>
+                <Box>
+                    <Typography variant="subtitle2" color="textSecondary" fontWeight="bold">
+                        {title}
                     </Typography>
-                    <Typography variant="body1" color="textSecondary">
-                        Find answers, contact support, or manage your requests.
+                    <Typography variant="h6" fontWeight="800" color="textPrimary">
+                        {detail}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                        {subtitle}
                     </Typography>
                 </Box>
+            </CardContent>
+        </Card>
+    );
+
+    return (
+        <Fade in={true} timeout={800}>
+            <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
+                
+                {/* 1. HERO HEADER */}
+                <Paper 
+                    elevation={0}
+                    sx={{ 
+                        p: 5, mb: 6, borderRadius: 4, 
+                        background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                        color: 'white', position: 'relative', overflow: 'hidden'
+                    }}
+                >
+                    <Box position="relative" zIndex={1}>
+                        <Stack direction="row" alignItems="center" gap={2} mb={2}>
+                            <SupportAgent sx={{ fontSize: 40, opacity: 0.8 }} />
+                            <Typography variant="overline" letterSpacing={2} sx={{ opacity: 0.8 }}>
+                                NTMI SUPPORT CENTER
+                            </Typography>
+                        </Stack>
+                        <Typography variant="h3" fontWeight="800" gutterBottom>
+                            How can we help you today?
+                        </Typography>
+                        <Typography variant="h6" sx={{ opacity: 0.8, maxWidth: 600, fontWeight: 'normal' }}>
+                            Browse common questions below or contact the IT team directly for urgent matters.
+                        </Typography>
+                    </Box>
+                    
+                    <Box sx={{ 
+                        position: 'absolute', right: -50, top: -50, width: 300, height: 300, 
+                        bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '50%' 
+                    }} />
+                </Paper>
 
                 <Grid container spacing={4}>
                     
-                    {/* LEFT COLUMN: CONTACT & ACTIONS */}
+                    {/* 2. LEFT COLUMN: DIRECT SUPPORT */}
                     <Grid item xs={12} md={4}>
-                        <Box display="flex" flexDirection="column" gap={3}>
+                        <Typography variant="h6" fontWeight="bold" mb={3} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <LiveHelp color="primary" /> Contact Support
+                        </Typography>
+
+                        <Stack spacing={2}>
+                            <ContactCard 
+                                icon={<Phone />} 
+                                color="#2563eb"
+                                title="Urgent Hardware Issues"
+                                detail="011-258-9999"
+                                subtitle="Mon-Fri • 8:00 AM - 5:00 PM"
+                            />
                             
-                            {/* Contact Card */}
-                            <Card elevation={0} sx={{ borderRadius: 4, bgcolor: '#e3f2fd', border: '1px solid #bbdefb' }}>
-                                <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                                    <PhoneIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                                    <Typography variant="h6" fontWeight="bold">IT Hotline</Typography>
-                                    <Typography variant="body2" color="textSecondary" gutterBottom>
-                                        Available Mon-Fri, 8am-5pm
-                                    </Typography>
-                                    <Typography variant="h5" color="primary" fontWeight="bold" sx={{ mt: 1 }}>
-                                        011-258-9999
-                                    </Typography>
-                                </CardContent>
-                            </Card>
+                            <ContactCard 
+                                icon={<Email />} 
+                                color="#7c3aed"
+                                title="General Enquiries"
+                                detail="support@ntmi.lk"
+                                subtitle="Response within 24 hours"
+                            />
 
-                            <Card elevation={0} sx={{ borderRadius: 4, border: '1px solid #e0e0e0' }}>
-                                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <EmailIcon color="action" />
-                                    <Box>
-                                        <Typography variant="subtitle2" fontWeight="bold">Email Support</Typography>
-                                        <Typography variant="body2" color="textSecondary">support@ntmi.lk</Typography>
-                                    </Box>
-                                </CardContent>
-                            </Card>
-
-                            {/* Quick Actions */}
-                            <Box mt={2}>
-                                <Typography variant="overline" fontWeight="bold" color="textSecondary">
-                                    Quick Actions
+                            <Box pt={2}>
+                                <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" mb={2} pl={1}>
+                                    ACTIONS
                                 </Typography>
+                                
                                 <Button 
-                                    fullWidth 
-                                    variant="outlined" 
-                                    startIcon={<LibraryBooksIcon />} 
-                                    sx={{ mt: 1, justifyContent: 'flex-start', py: 1.5, borderRadius: 2 }}
+                                    fullWidth variant="outlined" color="primary"
+                                    startIcon={<LibraryBooks />}
+                                    endIcon={<ChevronRight />}
+                                    sx={{ justifyContent: 'space-between', py: 1.5, mb: 2, borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
                                 >
                                     Download User Manual
                                 </Button>
+
                                 <Button 
-                                    fullWidth 
-                                    variant="outlined" 
-                                    color="error"
-                                    startIcon={<BugReportIcon />} 
+                                    fullWidth variant="contained" color="error"
+                                    startIcon={<BugReport />}
                                     onClick={() => navigate('/create-ticket')}
-                                    sx={{ mt: 2, justifyContent: 'flex-start', py: 1.5, borderRadius: 2 }}
+                                    sx={{ py: 1.5, borderRadius: 2, textTransform: 'none', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(211, 47, 47, 0.3)' }}
                                 >
-                                    Report a Critical Bug
+                                    Report Critical Bug
                                 </Button>
                             </Box>
-                        </Box>
+                        </Stack>
                     </Grid>
 
-                    {/* RIGHT COLUMN: FAQ ACCORDION */}
+                    {/* 3. RIGHT COLUMN: FAQ */}
                     <Grid item xs={12} md={8}>
-                        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <HelpOutlineIcon color="primary" />
-                            <Typography variant="h6" fontWeight="bold">
-                                Frequently Asked Questions
-                            </Typography>
-                        </Box>
-                        
+                        <Typography variant="h6" fontWeight="bold" mb={3} pl={1}>
+                            Frequently Asked Questions
+                        </Typography>
+
                         {faqs.map((faq) => (
                             <Accordion 
                                 key={faq.id} 
+                                id={faq.id} // ✅ Added ID for scrolling target
                                 expanded={expanded === faq.id} 
                                 onChange={handleChange(faq.id)}
                                 elevation={0}
                                 sx={{ 
                                     mb: 2, 
-                                    border: '1px solid #e0e0e0', 
+                                    border: expanded === faq.id ? '1px solid #2563eb' : '1px solid #e2e8f0',
                                     borderRadius: '12px !important', 
-                                    '&:before': { display: 'none' }, // Remove default line
-                                    overflow: 'hidden'
+                                    '&:before': { display: 'none' },
+                                    overflow: 'hidden',
+                                    transition: 'all 0.2s ease',
+                                    // Highlight effect if auto-expanded
+                                    boxShadow: expanded === faq.id ? '0 0 0 4px rgba(37, 99, 235, 0.1)' : 'none'
                                 }}
                             >
-                                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                    <Typography fontWeight="medium">{faq.question}</Typography>
+                                <AccordionSummary 
+                                    expandIcon={<ExpandMore sx={{ color: expanded === faq.id ? 'primary.main' : 'text.secondary' }} />}
+                                    sx={{ bgcolor: expanded === faq.id ? '#eff6ff' : 'white' }}
+                                >
+                                    <Typography fontWeight="bold" color={expanded === faq.id ? 'primary.main' : 'text.primary'}>
+                                        {faq.question}
+                                    </Typography>
                                 </AccordionSummary>
-                                <AccordionDetails sx={{ bgcolor: '#fafafa' }}>
-                                    <Typography variant="body2" color="textSecondary">
+                                <AccordionDetails sx={{ bgcolor: 'white', px: 3, pb: 3 }}>
+                                    <Typography variant="body2" color="textSecondary" sx={{ lineHeight: 1.6 }}>
                                         {faq.answer}
                                     </Typography>
                                 </AccordionDetails>
                             </Accordion>
                         ))}
 
-                        {/* Footer Note */}
-                        <Box mt={4} p={3} bgcolor="#f5f5f5" borderRadius={3} textAlign="center">
-                            <Typography variant="body2" color="textSecondary">
-                                Can't find what you're looking for? 
-                                <Button size="small" onClick={() => navigate('/create-ticket')} sx={{ ml: 1, fontWeight: 'bold' }}>
-                                    Raise a Ticket
-                                </Button>
+                        <Paper 
+                            elevation={0} 
+                            sx={{ 
+                                mt: 4, p: 3, borderRadius: 3, 
+                                bgcolor: '#f8fafc', border: '1px dashed #cbd5e1', 
+                                textAlign: 'center' 
+                            }}
+                        >
+                            <Typography variant="body2" color="textSecondary" mb={1}>
+                                Still can't find what you're looking for?
                             </Typography>
-                        </Box>
+                            <Button 
+                                onClick={() => navigate('/create-ticket')} 
+                                sx={{ fontWeight: 'bold', textTransform: 'none' }}
+                            >
+                                Raise a New Ticket &rarr;
+                            </Button>
+                        </Paper>
                     </Grid>
 
                 </Grid>

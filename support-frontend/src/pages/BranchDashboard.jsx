@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Container, Paper, Typography, Box, Card, CardContent, 
-    Avatar, Divider, Fade, Button, CircularProgress,
-    Dialog, DialogTitle, DialogContent, DialogActions, Chip // <--- Imported these
+    Divider, Fade, Button, CircularProgress,
+    Dialog, DialogTitle, DialogContent, DialogActions, Chip, Stack, IconButton, Tooltip, Alert, Grid
 } from '@mui/material';
 import { 
-    ConfirmationNumber, PendingActions, CheckCircle, 
-    LocationOn, Category, Description, AccessTime, Add, 
-    Cancel, Close // <--- Imported Icons
+    ConfirmationNumber, PendingActions, CheckCircle, Category, 
+    Add, Cancel, Download as DownloadIcon, AccessTime, Store
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify'; // Use Toast for notifications
+import { toast } from 'react-toastify';
 import api from '../services/api';
+import TicketComments from '../components/TicketComments'; // ✅ 1. Import Chat Component
 
 const getStatusColor = (status) => {
     switch (status) {
@@ -30,13 +30,11 @@ const BranchDashboard = () => {
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // --- New State for Popup ---
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
     const branchName = localStorage.getItem('branchName') || 'My Branch';
 
-    // Fetch Data Function (Reusable)
     const fetchDashboardData = async () => {
         try {
             const branchId = localStorage.getItem('branchId');
@@ -44,16 +42,23 @@ const BranchDashboard = () => {
 
             const response = await api.get(`/tickets/branch/${branchId}`);
             const allTickets = response.data;
-            
-            const sortedTickets = allTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            setTickets(sortedTickets);
 
+            // 1. Calculate Stats (Use ALL tickets for counts)
             setStats({
                 total: allTickets.length,
                 open: allTickets.filter(t => t.status === 'OPEN').length,
                 inProgress: allTickets.filter(t => t.status === 'IN_PROGRESS').length,
                 resolved: allTickets.filter(t => t.status === 'RESOLVED').length
             });
+            
+            // 2. Filter Grid (Show ONLY Active Tickets: OPEN or IN_PROGRESS)
+            const activeTickets = allTickets.filter(t => 
+                t.status === 'OPEN' || t.status === 'IN_PROGRESS'
+            );
+
+            const sortedTickets = activeTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setTickets(sortedTickets);
+
         } catch (error) {
             console.error("Error fetching dashboard data", error);
         } finally {
@@ -66,48 +71,55 @@ const BranchDashboard = () => {
     }, []);
 
     // --- Handlers ---
-
-    // Open Modal
     const handleTicketClick = (ticket) => {
         setSelectedTicket(ticket);
         setOpenDialog(true);
     };
 
-    // Close Modal
     const handleCloseDialog = () => {
         setOpenDialog(false);
         setSelectedTicket(null);
     };
 
-    // Cancel Ticket Logic
     const handleCancelTicket = async () => {
         if (!selectedTicket) return;
-        
-        // Confirm before cancelling
         if (!window.confirm("Are you sure you want to cancel this ticket?")) return;
 
         try {
             await api.put(`/tickets/${selectedTicket.ticketId}/cancel`);
             toast.success("Ticket Cancelled Successfully");
             handleCloseDialog();
-            fetchDashboardData(); // Refresh the list
+            fetchDashboardData(); 
         } catch (error) {
             toast.error("Failed to cancel ticket");
-            console.error(error);
         }
     };
 
+    const downloadImage = (base64Data, index) => {
+        const link = document.createElement("a");
+        link.href = base64Data;
+        link.download = `Evidence_Img_${index + 1}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // --- Styles ---
+    const getCardStyles = (status) => {
+        if (status === 'IN_PROGRESS') {
+            return { bg: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)', border: '#3b82f6', iconColor: '#3b82f6' };
+        }
+        if (status === 'OPEN') {
+            return { bg: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)', border: '#ef4444', iconColor: '#ef4444' };
+        }
+        return { bg: '#ffffff', border: '#e2e8f0', iconColor: '#64748b' };
+    };
+
     const KpiCard = ({ title, value, icon, color }) => (
-        <Paper 
-            elevation={2} 
-            sx={{ 
-                p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                borderRadius: 3, borderLeft: `5px solid ${color}`, flex: '1 1 200px'
-            }}
-        >
+        <Paper elevation={0} sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 3, border: `1px solid ${color}40`, bgcolor: `${color}08` }}>
             <Box>
                 <Typography variant="subtitle2" color="textSecondary" fontWeight="bold">{title}</Typography>
-                <Typography variant="h4" fontWeight="bold" color="textPrimary">{value}</Typography>
+                <Typography variant="h4" fontWeight="800" sx={{ color: color }}>{value}</Typography>
             </Box>
             <Box sx={{ bgcolor: `${color}20`, p: 1.5, borderRadius: '50%', color: color }}>
                 {icon}
@@ -119,112 +131,144 @@ const BranchDashboard = () => {
 
     return (
         <Fade in={true} timeout={800}>
-            <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+            <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
                 
-                {/* Header */}
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-                    <Box>
-                        <Typography variant="h4" fontWeight="bold" color="primary">Dashboard</Typography>
-                        <Typography variant="subtitle1" color="textSecondary">Overview for <strong>{branchName}</strong></Typography>
+                {/* 1. HERO HEADER */}
+                <Paper 
+                    elevation={0}
+                    sx={{ 
+                        p: 4, mb: 5, borderRadius: 4, 
+                        background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', 
+                        color: 'white', position: 'relative', overflow: 'hidden'
+                    }}
+                >
+                    <Box display="flex" justifyContent="space-between" alignItems="center" position="relative" zIndex={1}>
+                        <Box display="flex" alignItems="center" gap={3}>
+                            <Box sx={{ bgcolor: 'rgba(255,255,255,0.1)', p: 2, borderRadius: 3 }}>
+                                <Store sx={{ fontSize: 40, color: '#60a5fa' }} />
+                            </Box>
+                            <Box>
+                                <Typography variant="h4" fontWeight="800" gutterBottom>
+                                    {branchName} Dashboard
+                                </Typography>
+                                <Typography variant="body1" sx={{ opacity: 0.8 }}>
+                                    Overview of your IT support requests and their status.
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Button 
+                            variant="contained" 
+                            startIcon={<Add />} 
+                            onClick={() => navigate('/create-ticket')} 
+                            sx={{ 
+                                borderRadius: 3, px: 4, py: 1.5, fontWeight: 'bold',
+                                background: 'linear-gradient(45deg, #2563eb, #3b82f6)',
+                                boxShadow: '0 8px 16px rgba(37, 99, 235, 0.3)'
+                            }}
+                        >
+                            Raise New Ticket
+                        </Button>
                     </Box>
-                    <Button variant="contained" startIcon={<Add />} onClick={() => navigate('/create-ticket')} sx={{ borderRadius: 2, px: 3 }}>
-                        Raise Ticket
-                    </Button>
-                </Box>
+                    {/* Decorative Circle */}
+                    <Box sx={{ position: 'absolute', right: -50, top: -50, width: 250, height: 250, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.05)' }} />
+                </Paper>
 
-                {/* Stats */}
-                <Box display="flex" gap={3} mb={5} flexWrap="wrap">
-                    <KpiCard title="Total Tickets" value={stats.total} icon={<ConfirmationNumber />} color="#1976d2" />
-                    <KpiCard title="Pending" value={stats.open} icon={<PendingActions />} color="#d32f2f" />
-                    <KpiCard title="In Progress" value={stats.inProgress} icon={<Category />} color="#ed6c02" />
-                    <KpiCard title="Resolved" value={stats.resolved} icon={<CheckCircle />} color="#2e7d32" />
-                </Box>
+                {/* 2. KPI STATS */}
+                <Grid container spacing={3} mb={6}>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KpiCard title="Total Tickets" value={stats.total} icon={<ConfirmationNumber />} color="#1976d2" />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KpiCard title="Pending Review" value={stats.open} icon={<PendingActions />} color="#d32f2f" />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KpiCard title="Being Fixed" value={stats.inProgress} icon={<Category />} color="#ed6c02" />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <KpiCard title="Resolved" value={stats.resolved} icon={<CheckCircle />} color="#2e7d32" />
+                    </Grid>
+                </Grid>
 
-                <Typography variant="h5" fontWeight="bold" gutterBottom>Recent Tickets</Typography>
+                <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 3 }}>
+                    Active Requests
+                </Typography>
 
-                {/* Ticket Grid */}
-                <Box display="grid" gridTemplateColumns="repeat(auto-fill, minmax(300px, 1fr))" gap={3}>
-                    {tickets.map((ticket) => {
-                        const statusColor = getStatusColor(ticket.status);
-                        return (
-                            <Card 
-                                key={ticket.ticketId} 
-                                elevation={3} 
-                                onClick={() => handleTicketClick(ticket)}
-                                sx={{ 
-                                    borderRadius: 2, 
-                                    borderLeft: `6px solid ${statusColor}`,
-                                    cursor: 'pointer',
-                                    transition: 'transform 0.2s',
-                                    '&:hover': { transform: 'scale(1.02)' }
-                                }}
-                            >
-                                {/* Status Banner */}
-                                <Box sx={{ bgcolor: statusColor, color: 'white', py: 0.5, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
-                                    {ticket.status.replace('_', ' ')}
-                                </Box>
+                {/* 3. TICKET GRID (Only Open/In Progress) */}
+                {tickets.length === 0 ? (
+                    <Box textAlign="center" py={5} bgcolor="#f8fafc" borderRadius={3} border="1px dashed #e2e8f0">
+                        <CheckCircle sx={{ fontSize: 60, color: '#22c55e', mb: 2, opacity: 0.5 }} />
+                        <Typography variant="h6" color="textSecondary">All clear! No pending issues.</Typography>
+                    </Box>
+                ) : (
+                    <Grid container spacing={3}>
+                        {tickets.map((ticket) => {
+                            const styles = getCardStyles(ticket.status);
+                            
+                            return (
+                                <Grid item xs={12} sm={6} md={4} lg={3} key={ticket.ticketId}>
+                                    <Card 
+                                        elevation={0}
+                                        sx={{ 
+                                            borderRadius: 4, height: '100%', display: 'flex', flexDirection: 'column',
+                                            background: styles.bg, border: `1px solid ${styles.border}`, position: 'relative',
+                                            cursor: 'pointer', transition: 'all 0.3s ease',
+                                            '&:hover': { transform: 'translateY(-5px)', boxShadow: '0 10px 20px -5px rgba(0, 0, 0, 0.1)' }
+                                        }}
+                                        onClick={() => handleTicketClick(ticket)}
+                                    >
+                                        <CardContent sx={{ flexGrow: 1, p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                            
+                                            <Box display="flex" justifyContent="space-between" alignItems="start">
+                                                <Chip label={`#${ticket.ticketId}`} size="small" sx={{ fontWeight: 'bold', bgcolor: 'white', border: '1px solid #e2e8f0' }} />
+                                                <Chip 
+                                                    label={ticket.status.replace('_', ' ')} 
+                                                    size="small" 
+                                                    sx={{ fontWeight: 'bold', bgcolor: getStatusColor(ticket.status), color: 'white' }} 
+                                                />
+                                            </Box>
 
-                                <CardContent sx={{ pt: 2, pb: 1 }}>
-                                    
-                                    {/* Ticket ID */}
-                                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                                        <Typography variant="h6" color="primary" fontWeight="bold">
-                                            TKT-{ticket.ticketId}
-                                        </Typography>
-                                    </Box>
+                                            <Box flexGrow={1}>
+                                                <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1.2, mb: 0.5 }}>
+                                                    {ticket.errorCategory?.categoryName}
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {ticket.errorType?.typeName}
+                                                </Typography>
+                                            </Box>
 
-                                    <Divider sx={{ mb: 2 }} />
+                                            <Divider sx={{ borderStyle: 'dashed' }} />
 
-                                    {/* Ticket Details Grid */}
-                                    <Box display="flex" flexDirection="column" gap={1.5}>
-                                        
-                                        {/* Error Category */}
-                                        <Box display="flex" justifyContent="space-between">
-                                            <Typography variant="body2" color="textSecondary" fontWeight="bold">Category:</Typography>
-                                            <Typography variant="body2" fontWeight="medium">
-                                                {ticket.errorCategory ? ticket.errorCategory.categoryName : '-'}
-                                            </Typography>
-                                        </Box>
+                                            <Box display="flex" justifyContent="space-between" alignItems="center">
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    <AccessTime sx={{ fontSize: 16, color: styles.iconColor }} />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {new Date(ticket.createdAt).toLocaleDateString()}
+                                                    </Typography>
+                                                </Box>
+                                                <Store sx={{ fontSize: 20, color: styles.iconColor, opacity: 0.5 }} />
+                                            </Box>
 
-                                        {/* Error Type */}
-                                        <Box display="flex" justifyContent="space-between">
-                                            <Typography variant="body2" color="textSecondary" fontWeight="bold">Type:</Typography>
-                                            <Typography variant="body2" fontWeight="medium">
-                                                {ticket.errorType ? ticket.errorType.typeName : '-'}
-                                            </Typography>
-                                        </Box>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            );
+                        })}
+                    </Grid>
+                )}
 
-                                        {/* Raised By */}
-                                        <Box display="flex" justifyContent="space-between">
-                                            <Typography variant="body2" color="textSecondary" fontWeight="bold">Raised By:</Typography>
-                                            <Typography variant="body2" fontWeight="medium">
-                                                {ticket.createdBy ? ticket.createdBy.fullName : 'Unknown'}
-                                            </Typography>
-                                        </Box>
-
-                                        {/* Date & Time */}
-                                        <Box display="flex" justifyContent="space-between">
-                                            <Typography variant="body2" color="textSecondary" fontWeight="bold">Date:</Typography>
-                                            <Typography variant="caption" sx={{ bgcolor: '#f5f5f5', px: 1, py: 0.5, borderRadius: 1 }}>
-                                                {new Date(ticket.createdAt).toLocaleString()}
-                                            </Typography>
-                                        </Box>
-
-                                    </Box>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </Box>
-
-                {/* --- DETAILS POPUP (DIALOG) --- */}
-                <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+                {/* --- DETAILS DIALOG --- */}
+                <Dialog 
+                    open={openDialog} 
+                    onClose={handleCloseDialog} 
+                    maxWidth="sm" fullWidth
+                    PaperProps={{ sx: { borderRadius: 3 } }}
+                >
                     {selectedTicket && (
                         <>
-                            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#f5f5f5' }}>
+                            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
                                 <Box>
                                     <Typography variant="h6" fontWeight="bold">Ticket Details</Typography>
-                                    <Typography variant="caption" color="textSecondary">TKT-{selectedTicket.ticketId}</Typography>
+                                    <Typography variant="caption" color="textSecondary">ID: TKT-{selectedTicket.ticketId}</Typography>
                                 </Box>
                                 <Chip 
                                     label={selectedTicket.status.replace('_', ' ')} 
@@ -232,60 +276,85 @@ const BranchDashboard = () => {
                                 />
                             </DialogTitle>
                             
-                            <DialogContent dividers>
-                                <Box display="flex" flexDirection="column" gap={2}>
+                            <DialogContent sx={{ pt: 3 }}>
+                                <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
+                                    <Typography variant="subtitle2" fontWeight="bold">Subject:</Typography>
+                                    {selectedTicket.subject || 'No Subject'}
+                                </Alert>
+
+                                {/* Image Gallery */}
+                                {selectedTicket.images && selectedTicket.images.length > 0 && (
+                                    <Box mb={3}>
+                                        <Typography variant="caption" fontWeight="bold" color="textSecondary" display="block" mb={1}>
+                                            ATTACHED EVIDENCE
+                                        </Typography>
+                                        <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 1 }}>
+                                            {selectedTicket.images.map((img, idx) => (
+                                                <Box key={idx} position="relative" sx={{ flexShrink: 0 }}>
+                                                    <Box 
+                                                        component="img"
+                                                        src={img.base64Data}
+                                                        alt="evidence"
+                                                        onClick={() => window.open(img.base64Data)}
+                                                        sx={{ 
+                                                            width: 80, height: 80, borderRadius: 2, 
+                                                            border: '2px solid #e2e8f0', objectFit: 'cover', 
+                                                            cursor: 'zoom-in', transition: 'all 0.2s',
+                                                            '&:hover': { transform: 'scale(1.05)', borderColor: '#3b82f6' } 
+                                                        }}
+                                                    />
+                                                    <Tooltip title="Download">
+                                                        <IconButton 
+                                                            size="small"
+                                                            onClick={(e) => { e.stopPropagation(); downloadImage(img.base64Data, idx); }}
+                                                            sx={{ position: 'absolute', bottom: -8, right: -8, bgcolor: 'white', border: '1px solid #ddd', boxShadow: 2, '&:hover': { bgcolor: '#f5f5f5' } }}
+                                                        >
+                                                            <DownloadIcon fontSize="small" color="primary" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </Box>
+                                            ))}
+                                        </Stack>
+                                    </Box>
+                                )}
+
+                                <Typography variant="caption" fontWeight="bold" color="textSecondary">DESCRIPTION</Typography>
+                                <Paper variant="outlined" sx={{ p: 2, mt: 0.5, mb: 3, bgcolor: '#fafafa', borderRadius: 2 }}>
+                                    <Typography variant="body2">{selectedTicket.description || 'No description provided.'}</Typography>
+                                </Paper>
+
+                                {/* ✅ ADDED: Comments Component */}
+                                <Divider sx={{ my: 2 }} />
+                                <TicketComments ticketId={selectedTicket.ticketId} />
+
+                                <Box display="flex" justifyContent="space-between" bgcolor="#f1f5f9" p={2} borderRadius={2} mt={2}>
                                     <Box>
-                                        <Typography variant="caption" color="textSecondary" fontWeight="bold">SUBJECT</Typography>
-                                        <Typography variant="body1">{selectedTicket.subject}</Typography>
+                                        <Typography variant="caption" color="textSecondary">Assigned To</Typography>
+                                        <Typography variant="body2" fontWeight="bold">
+                                            {selectedTicket.assignedAdmin ? selectedTicket.assignedAdmin.fullName : "Pending Assignment"}
+                                        </Typography>
                                     </Box>
-                                    <Box>
-                                        <Typography variant="caption" color="textSecondary" fontWeight="bold">DESCRIPTION</Typography>
-                                        <Paper elevation={0} sx={{ p: 2, bgcolor: '#f9f9f9', borderRadius: 2 }}>
-                                            <Typography variant="body2">{selectedTicket.description}</Typography>
-                                        </Paper>
-                                    </Box>
-                                    <Box display="flex" gap={4}>
-                                        <Box>
-                                            <Typography variant="caption" color="textSecondary" fontWeight="bold">CATEGORY</Typography>
-                                            <Typography variant="body2">{selectedTicket.errorCategory?.categoryName || '-'}</Typography>
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="caption" color="textSecondary" fontWeight="bold">TYPE</Typography>
-                                            <Typography variant="body2">{selectedTicket.errorType?.typeName || '-'}</Typography>
-                                        </Box>
-                                    </Box>
-                                    
-                                    <Divider />
-                                    
-                                    <Box display="flex" alignItems="center" gap={2}>
-                                        <Avatar sx={{ bgcolor: selectedTicket.assignedUser ? '#1976d2' : '#bdbdbd' }}>
-                                            {selectedTicket.assignedUser?.fullName.charAt(0) || '?'}
-                                        </Avatar>
-                                        <Box>
-                                            <Typography variant="caption" color="textSecondary" fontWeight="bold">ASSIGNED TECHNICIAN</Typography>
-                                            <Typography variant="body2">
-                                                {selectedTicket.assignedUser ? selectedTicket.assignedUser.fullName : "Waiting for assignment..."}
-                                            </Typography>
-                                        </Box>
+                                    <Box textAlign="right">
+                                        <Typography variant="caption" color="textSecondary">Created On</Typography>
+                                        <Typography variant="body2" fontWeight="bold">
+                                            {new Date(selectedTicket.createdAt).toLocaleDateString()}
+                                        </Typography>
                                     </Box>
                                 </Box>
                             </DialogContent>
                             
-                            <DialogActions sx={{ p: 2 }}>
-                                {/* Only show Cancel button if ticket is OPEN */}
+                            <DialogActions sx={{ p: 3, borderTop: '1px solid #f1f5f9' }}>
                                 {selectedTicket.status === 'OPEN' && (
                                     <Button 
-                                        variant="outlined" 
-                                        color="error" 
-                                        startIcon={<Cancel />} 
-                                        onClick={handleCancelTicket}
-                                        sx={{ mr: 'auto' }} // Pushes button to the left
+                                        variant="outlined" color="error" 
+                                        startIcon={<Cancel />} onClick={handleCancelTicket} 
+                                        sx={{ mr: 'auto', borderRadius: 2, fontWeight: 'bold' }}
                                     >
-                                        Cancel Ticket
+                                        Cancel Request
                                     </Button>
                                 )}
-                                <Button onClick={handleCloseDialog} variant="contained" color="primary">
-                                    Close Details
+                                <Button onClick={handleCloseDialog} variant="contained" color="primary" sx={{ borderRadius: 2, px: 3, fontWeight: 'bold' }}>
+                                    Close
                                 </Button>
                             </DialogActions>
                         </>
