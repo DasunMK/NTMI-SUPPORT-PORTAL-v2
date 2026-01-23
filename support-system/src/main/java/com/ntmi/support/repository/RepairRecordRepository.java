@@ -1,0 +1,27 @@
+package com.ntmi.support.repository;
+
+import com.ntmi.support.model.RepairRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import java.util.List;
+import java.util.Map;
+
+public interface RepairRecordRepository extends JpaRepository<RepairRecord, Long> {
+
+    // ✅ FIX: Add this line to allow searching repairs by Asset ID
+    List<RepairRecord> findByAsset_AssetId(Long assetId);
+
+    // --- Existing Monthly Cost Query (Keep this) ---
+    @Query(value = """
+        SELECT 
+            b.branch_name AS branch, 
+            FORMAT(r.repair_date, 'yyyy-MM') AS month, 
+            SUM(r.cost) AS totalCost 
+        FROM repair_records r
+        JOIN assets a ON r.asset_id = a.asset_id
+        JOIN branches b ON a.branch_id = b.branch_id
+        GROUP BY b.branch_name, FORMAT(r.repair_date, 'yyyy-MM')
+        ORDER BY month DESC
+    """, nativeQuery = true)
+    List<Map<String, Object>> findMonthlyCostsByBranch();
+}

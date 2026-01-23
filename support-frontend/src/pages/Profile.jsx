@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { 
     Container, Paper, Typography, Box, Avatar, Grid, Button, 
-    Divider, Chip, Stack, Fade, IconButton, Tooltip, 
+    Divider, Chip, Stack, Fade, Tooltip, 
     Dialog, DialogTitle, DialogContent, DialogActions, TextField
 } from '@mui/material';
 import { 
     Person, Email, Phone, Business, Key, 
-    AdminPanelSettings, Edit, VerifiedUser, CalendarMonth 
+    AdminPanelSettings, VerifiedUser, CalendarMonth 
 } from '@mui/icons-material';
-import { toast } from 'react-toastify'; // Ensure you have this installed
+import { toast } from 'react-toastify'; 
 import api from '../services/api';
 
 const Profile = () => {
@@ -19,7 +19,7 @@ const Profile = () => {
     const branchName = localStorage.getItem('branchName') || 'Head Office';
     const lastLogin = new Date().toLocaleDateString();
 
-    // --- NEW: Password Dialog State ---
+    // --- Password Dialog State ---
     const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
     const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
 
@@ -28,25 +28,36 @@ const Profile = () => {
 
     // 3. Handle Password Change
     const handleChangePassword = async () => {
+        // Validation
         if (!passwords.current || !passwords.new || !passwords.confirm) {
-            toast.error("Please fill in all fields");
+            toast.warning("Please fill in all fields");
             return;
         }
         if (passwords.new !== passwords.confirm) {
             toast.error("New passwords do not match");
             return;
         }
+        if (passwords.new.length < 6) {
+            toast.warning("Password must be at least 6 characters");
+            return;
+        }
 
         try {
-            await api.put('/users/change-password', {
+            // ✅ API Call - Matches the new Controller Endpoint
+            const response = await api.put('/users/change-password', {
                 currentPassword: passwords.current,
                 newPassword: passwords.new
             });
-            toast.success("Password changed successfully!");
+            
+            toast.success(response.data || "Password changed successfully!");
             setOpenPasswordDialog(false);
             setPasswords({ current: '', new: '', confirm: '' }); // Reset form
+            
         } catch (error) {
-            toast.error(error.response?.data || "Failed to change password");
+            console.error("Password Change Error:", error);
+            // Show specific message from backend (e.g., "Incorrect current password")
+            const msg = error.response?.data || "Failed to change password.";
+            toast.error(typeof msg === 'string' ? msg : "An error occurred");
         }
     };
 
@@ -225,7 +236,6 @@ const Profile = () => {
                                     </Typography>
                                 </Grid>
                                 <Grid item xs={12} sm={4} textAlign={{ sm: 'right' }}>
-                                    {/* ✅ BUTTON TRIGGERS DIALOG */}
                                     <Button 
                                         variant="outlined" 
                                         color="primary" 

@@ -18,6 +18,7 @@ public class TicketService {
     @Autowired private ErrorCategoryRepository categoryRepository;
     @Autowired private ErrorTypeRepository typeRepository;
     @Autowired private TicketImageRepository ticketImageRepository;
+    @Autowired private AssetRepository assetRepository;
 
     @Transactional
     public Ticket createTicket(TicketDTO dto, Long userId) {
@@ -76,6 +77,13 @@ public class TicketService {
                 }
             }
         }
+
+        if (dto.getAssetId() != null) {
+        Asset asset = assetRepository.findById(dto.getAssetId())
+                      .orElseThrow(() -> new RuntimeException("Asset not found"));
+        ticket.setAsset(asset);
+    }
+
 
         return ticketRepository.save(savedTicket);
     }

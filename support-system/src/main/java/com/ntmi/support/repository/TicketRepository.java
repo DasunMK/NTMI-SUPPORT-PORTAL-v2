@@ -32,4 +32,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.branch.branchId = :branchId AND t.status != 'CLOSED' AND t.status != 'RESOLVED' AND t.createdAt < :date")
     long countPastDueTicketsByBranch(@Param("branchId") Long branchId, @Param("date") LocalDateTime date);
+
+    @Query("SELECT t FROM Ticket t WHERE t.status = 'RESOLVED' AND t.resolvedAt IS NOT NULL")
+    List<Ticket> findAllResolvedTickets();
 }

@@ -19,8 +19,9 @@ public class BranchController {
     // 1. Get All Branches
     // GET http://localhost:8080/api/branches
     @GetMapping
-    public List<Branch> getAllBranches() {
-        return branchService.getAllBranches();
+    public ResponseEntity<List<Branch>> getAllBranches() {
+        List<Branch> branches = branchService.getAllBranches();
+        return ResponseEntity.ok(branches);
     }
 
     // 2. Add a New Branch

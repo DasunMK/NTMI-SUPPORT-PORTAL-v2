@@ -1,14 +1,18 @@
 package com.ntmi.support.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.ToString;
+import lombok.EqualsAndHashCode;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
-import java.util.Collections; // Used for safer list creation
+import java.util.Collections;
 import java.util.List;
 
 @Entity
@@ -39,15 +43,30 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private Role role; 
 
+    // --- RELATIONSHIPS (Fixed to prevent 500 Error) ---
+
     @ManyToOne
     @JoinColumn(name = "branch_id")
-    private Branch branch; 
+    // ✅ CRITICAL FIX: Don't load the Branch's lists (users, tickets, assets) 
+    // when loading a User. This stops the infinite loop.
+    @JsonIgnoreProperties({"users", "tickets", "assets"}) 
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Branch branch;
+
+    // ✅ Added Tickets List (Inverse Relationship)
+    // Marked with @JsonIgnore so we don't load all tickets every time we load a user.
+    @OneToMany(mappedBy = "createdBy")
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private List<Ticket> tickets;
 
     // --- SPRING SECURITY METHODS ---
 
     @Override
+    @JsonIgnore // Don't expose authorities in API responses
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // 🛠️ CRITICAL FIX: Removed "ROLE_" prefix to match Controller checks exactly
         if (this.role == null) {
             return Collections.emptyList();
         }
@@ -55,22 +74,18 @@ public class User implements UserDetails {
     }
 
     @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
+    @JsonIgnore
+    public boolean isAccountNonExpired() { return true; }
 
     @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
+    @JsonIgnore
+    public boolean isAccountNonLocked() { return true; }
 
     @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
+    @JsonIgnore
+    public boolean isCredentialsNonExpired() { return true; }
 
     @Override
-    public boolean isEnabled() {
-        return true;
-    }
+    @JsonIgnore
+    public boolean isEnabled() { return true; }
 }

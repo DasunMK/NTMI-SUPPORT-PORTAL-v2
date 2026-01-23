@@ -28,4 +28,9 @@ public class TicketDTO {
     private String branchName;
     private String createdBy;
     private LocalDateTime createdAt;
+
+    private Long assetId;
+    public Long getAssetId() { return assetId; }
+    public void setAssetId(Long assetId) { this.assetId = assetId;}
+
 }

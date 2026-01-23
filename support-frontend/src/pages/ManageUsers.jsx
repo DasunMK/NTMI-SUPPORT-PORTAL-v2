@@ -323,104 +323,167 @@ const ManageUsers = () => {
                 </TableContainer>
 
                 {/* 4. USER DIALOG (Well Organized Form) */}
-                <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                    <DialogTitle sx={{ borderBottom: '1px solid #f1f5f9', pb: 2, bgcolor: '#f8fafc' }}>
-                        <Typography variant="h6" fontWeight="bold">
-                            {isEdit ? 'Edit User Profile' : 'Create New Account'}
-                        </Typography>
-                    </DialogTitle>
-                    
-                    <DialogContent sx={{ pt: 3 }}>
-                        <Stack spacing={3} mt={1}>
-                            
-                            {/* Section 1: Identity */}
-                            <Box>
-                                <Typography variant="caption" fontWeight="800" color="textSecondary" sx={{ letterSpacing: 1 }}>IDENTITY</Typography>
-                                <Divider sx={{ my: 1 }} />
-                                <Grid container spacing={2} mt={0}>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField 
-                                            label="Full Name" fullWidth size="small"
-                                            value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-                                            error={!!errors.fullName} helperText={errors.fullName}
-                                            InputProps={{ startAdornment: <InputAdornment position="start"><Person fontSize="small" color="action"/></InputAdornment> }}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField 
-                                            label="Email Address" fullWidth size="small"
-                                            value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} 
-                                            error={!!errors.email} helperText={errors.email}
-                                            InputProps={{ startAdornment: <InputAdornment position="start"><Email fontSize="small" color="action"/></InputAdornment> }}
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </Box>
+                <Dialog 
+    open={open} 
+    onClose={() => setOpen(false)} 
+    maxWidth="sm" 
+    fullWidth 
+    PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}
+>
+    {/* Modern Header with Slate Gradient Style */}
+    <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', py: 2.5 }}>
+        <Typography variant="h6" fontWeight="800">
+            {isEdit ? 'Update User Profile' : 'Register New NTMI Account'}
+        </Typography>
+        <Typography variant="caption" sx={{ opacity: 0.7, textTransform: 'uppercase', letterSpacing: 1 }}>
+            System Access Management
+        </Typography>
+    </DialogTitle>
+    
+    <DialogContent sx={{ mt: 3, pb: 2 }}>
+        <Stack spacing={3.5} sx={{ width: '100%' }}>
+            
+            {/* Section 1: Identity */}
+            <Box>
+                <Typography variant="caption" fontWeight="800" color="primary" sx={{ letterSpacing: 1.5 }}>
+                    IDENTITY & CONTACT
+                </Typography>
+                <Divider sx={{ my: 1.5, borderColor: '#e2e8f0' }} />
+                
+                {/* Fixed Flex Row: Full Name & Email */}
+                <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                    <TextField 
+                        label="Full Name" 
+                        variant="outlined"
+                        sx={{ flex: 1 }}
+                        value={formData.fullName} 
+                        onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                        error={!!errors.fullName} 
+                        helperText={errors.fullName}
+                        InputProps={{ 
+                            startAdornment: <InputAdornment position="start"><Person fontSize="small" color="action"/></InputAdornment>,
+                            sx: { borderRadius: 2 } 
+                        }}
+                    />
+                    <TextField 
+                        label="Email Address" 
+                        variant="outlined"
+                        sx={{ flex: 1 }}
+                        value={formData.email} 
+                        onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                        error={!!errors.email} 
+                        helperText={errors.email}
+                        InputProps={{ 
+                            startAdornment: <InputAdornment position="start"><Email fontSize="small" color="action"/></InputAdornment>,
+                            sx: { borderRadius: 2 } 
+                        }}
+                    />
+                </Box>
+            </Box>
 
-                            {/* Section 2: Credentials */}
-                            <Box>
-                                <Typography variant="caption" fontWeight="800" color="textSecondary" sx={{ letterSpacing: 1 }}>CREDENTIALS</Typography>
-                                <Divider sx={{ my: 1 }} />
-                                <Grid container spacing={2} mt={0}>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField 
-                                            label="Username" fullWidth size="small"
-                                            value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} 
-                                            error={!!errors.username} helperText={errors.username}
-                                        />
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField 
-                                            label={isEdit ? "New Password (Optional)" : "Password"} 
-                                            type="password" fullWidth size="small"
-                                            value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                                            error={!!errors.password} helperText={errors.password}
-                                            InputProps={{ startAdornment: <InputAdornment position="start"><Key fontSize="small" color="action"/></InputAdornment> }}
-                                        />
-                                    </Grid>
-                                </Grid>
-                            </Box>
+            {/* Section 2: Credentials */}
+            <Box>
+                <Typography variant="caption" fontWeight="800" color="primary" sx={{ letterSpacing: 1.5 }}>
+                    LOGIN CREDENTIALS
+                </Typography>
+                <Divider sx={{ my: 1.5, borderColor: '#e2e8f0' }} />
+                
+                {/* Fixed Flex Row: Username & Password */}
+                <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                    <TextField 
+                        label="Username" 
+                        variant="outlined"
+                        sx={{ flex: 1 }}
+                        value={formData.username} 
+                        onChange={(e) => setFormData({...formData, username: e.target.value})} 
+                        error={!!errors.username} 
+                        helperText={errors.username}
+                        InputProps={{ sx: { borderRadius: 2 } }}
+                    />
+                    <TextField 
+                        label={isEdit ? "New Password (Optional)" : "Security Password"} 
+                        type="password" 
+                        variant="outlined"
+                        sx={{ flex: 1 }}
+                        value={formData.password} 
+                        onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                        error={!!errors.password} 
+                        helperText={errors.password}
+                        InputProps={{ 
+                            startAdornment: <InputAdornment position="start"><Key fontSize="small" color="action"/></InputAdornment>,
+                            sx: { borderRadius: 2 } 
+                        }}
+                    />
+                </Box>
+            </Box>
 
-                            {/* Section 3: Access Control */}
-                            <Box>
-                                <Typography variant="caption" fontWeight="800" color="textSecondary" sx={{ letterSpacing: 1 }}>ACCESS CONTROL</Typography>
-                                <Divider sx={{ my: 1 }} />
-                                <Grid container spacing={2} mt={0}>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField 
-                                            select label="System Role" fullWidth size="small"
-                                            value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})}
-                                        >
-                                            <MenuItem value="BRANCH_USER">Branch Officer</MenuItem>
-                                            <MenuItem value="ADMIN">System Administrator</MenuItem>
-                                        </TextField>
-                                    </Grid>
-                                    <Grid item xs={12} sm={6}>
-                                        <TextField 
-                                            select label="Branch Assignment" fullWidth size="small"
-                                            value={formData.branch} onChange={(e) => setFormData({...formData, branch: e.target.value})}
-                                            error={!!errors.branch} helperText={errors.branch || (formData.role === 'ADMIN' ? 'Not applicable for Admin' : '')}
-                                            disabled={formData.role === 'ADMIN'}
-                                        >
-                                            <MenuItem value=""><em>Select Branch</em></MenuItem>
-                                            {branches.map((b) => (
-                                                <MenuItem key={b.branchId} value={b.branchId}>{b.branchName}</MenuItem>
-                                            ))}
-                                        </TextField>
-                                    </Grid>
-                                </Grid>
-                            </Box>
+            {/* Section 3: Access Control */}
+            <Box>
+                <Typography variant="caption" fontWeight="800" color="primary" sx={{ letterSpacing: 1.5 }}>
+                    AUTHORIZATION
+                </Typography>
+                <Divider sx={{ my: 1.5, borderColor: '#e2e8f0' }} />
+                
+                {/* Fixed Flex Row: System Role & Branch Assignment */}
+                <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                    <TextField 
+                        select 
+                        label="System Role" 
+                        variant="outlined"
+                        sx={{ flex: 1 }}
+                        value={formData.role} 
+                        onChange={(e) => setFormData({...formData, role: e.target.value})}
+                        InputProps={{ sx: { borderRadius: 2 } }}
+                    >
+                        <MenuItem value="BRANCH_USER">Branch Officer</MenuItem>
+                        <MenuItem value="ADMIN">System Administrator</MenuItem>
+                    </TextField>
 
-                        </Stack>
-                    </DialogContent>
+                    <TextField 
+                        select 
+                        label="Branch Assignment" 
+                        variant="outlined"
+                        sx={{ flex: 1 }}
+                        value={formData.branch} 
+                        onChange={(e) => setFormData({...formData, branch: e.target.value})}
+                        error={!!errors.branch} 
+                        helperText={errors.branch || (formData.role === 'ADMIN' ? 'Full access (all branches)' : '')}
+                        disabled={formData.role === 'ADMIN'}
+                        InputProps={{ sx: { borderRadius: 2 } }}
+                    >
+                        <MenuItem value=""><em>Select Target Branch</em></MenuItem>
+                        {branches.map((b) => (
+                            <MenuItem key={b.branchId} value={b.branchId}>{b.branchName}</MenuItem>
+                        ))}
+                    </TextField>
+                </Box>
+            </Box>
 
-                    <DialogActions sx={{ p: 3, borderTop: '1px solid #f1f5f9', bgcolor: '#f8fafc' }}>
-                        <Button onClick={() => setOpen(false)} sx={{ color: 'text.secondary', fontWeight: 'bold' }}>Cancel</Button>
-                        <Button variant="contained" onClick={handleSubmit} sx={{ borderRadius: 2, px: 3, fontWeight: 'bold' }}>
-                            {isEdit ? 'Save Changes' : 'Create User'}
-                        </Button>
-                    </DialogActions>
-                </Dialog>
+        </Stack>
+    </DialogContent>
+
+    <DialogActions sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
+        <Button 
+            onClick={() => setOpen(false)} 
+            sx={{ color: '#64748b', fontWeight: 'bold' }}
+        >
+            CANCEL
+        </Button>
+        <Button 
+            variant="contained" 
+            onClick={handleSubmit} 
+            sx={{ 
+                borderRadius: 2, 
+                px: 4, 
+                fontWeight: 'bold', 
+                background: 'linear-gradient(to right, #2563eb, #1d4ed8)',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+            }}
+        >
+            {isEdit ? 'SAVE UPDATES' : 'PROVISION ACCOUNT'}
+        </Button>
+    </DialogActions>
+</Dialog>
 
             </Container>
         </Fade>
