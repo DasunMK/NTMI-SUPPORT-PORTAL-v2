@@ -24,12 +24,14 @@ public class Comment {
     // Who wrote the comment?
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnoreProperties({"password", "roles", "authorities", "branch"}) // Clean up JSON output
+    // ✅ Don't show sensitive user info in the comment author object
+    @JsonIgnoreProperties({"password", "roles", "authorities", "branch", "tickets"}) 
     private User author;
 
     // Which ticket is this for?
     @ManyToOne
     @JoinColumn(name = "ticket_id", nullable = false)
-    @JsonIgnoreProperties("comments") // Prevent infinite recursion
+    // ✅ Stop infinite loop: Ticket -> Comments -> Ticket
+    @JsonIgnoreProperties({"comments", "branch", "asset", "createdBy", "assignedAdmin"}) 
     private Ticket ticket;
 }

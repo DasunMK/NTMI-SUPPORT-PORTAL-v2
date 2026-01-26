@@ -39,23 +39,24 @@ public class User implements UserDetails {
 
     private String phone;
 
+    // ✅ FIX APPLIED: Added 'columnDefinition' to handle existing data in DB.
+    // "BIT DEFAULT 1" sets this to TRUE for all current users, preventing the SQL error.
+    @Column(nullable = false, columnDefinition = "BIT DEFAULT 1")
+    private boolean active = true; 
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role; 
 
-    // --- RELATIONSHIPS (Fixed to prevent 500 Error) ---
+    // --- RELATIONSHIPS ---
 
     @ManyToOne
     @JoinColumn(name = "branch_id")
-    // ✅ CRITICAL FIX: Don't load the Branch's lists (users, tickets, assets) 
-    // when loading a User. This stops the infinite loop.
     @JsonIgnoreProperties({"users", "tickets", "assets"}) 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Branch branch;
 
-    // ✅ Added Tickets List (Inverse Relationship)
-    // Marked with @JsonIgnore so we don't load all tickets every time we load a user.
     @OneToMany(mappedBy = "createdBy")
     @JsonIgnore
     @ToString.Exclude
@@ -65,11 +66,9 @@ public class User implements UserDetails {
     // --- SPRING SECURITY METHODS ---
 
     @Override
-    @JsonIgnore // Don't expose authorities in API responses
+    @JsonIgnore
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        if (this.role == null) {
-            return Collections.emptyList();
-        }
+        if (this.role == null) return Collections.emptyList();
         return List.of(new SimpleGrantedAuthority(role.name()));
     }
 
@@ -79,7 +78,7 @@ public class User implements UserDetails {
 
     @Override
     @JsonIgnore
-    public boolean isAccountNonLocked() { return true; }
+    public boolean isAccountNonLocked() { return this.active; } // ✅ Lock account if inactive
 
     @Override
     @JsonIgnore
@@ -87,5 +86,5 @@ public class User implements UserDetails {
 
     @Override
     @JsonIgnore
-    public boolean isEnabled() { return true; }
+    public boolean isEnabled() { return this.active; } // ✅ Disable account if inactive
 }

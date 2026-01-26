@@ -3,16 +3,13 @@ import {
     Container, Paper, Typography, Box, Chip, Button, 
     TextField, MenuItem, Dialog, DialogTitle, DialogContent, 
     DialogActions, Card, CardContent, Fade, CircularProgress,
-    InputAdornment, Divider, Alert, Stack, IconButton, Grid, Avatar, Tooltip, useTheme
+    InputAdornment, Divider, Alert, Stack, IconButton, Grid, Avatar, Tooltip
 } from '@mui/material';
 import { 
-    Search, PlayArrow, CheckCircle, Person,
-    AssignmentLate, PendingActions, TaskAlt,
-    Download as DownloadIcon, Lock, FilterList, 
-    Dashboard, Business, AccessTime, Print, Close,
-    Description as DescriptionIcon, Image as ImageIcon,
-    Category, ReportProblem, Computer, DeleteForever, ChatBubbleOutline,
-    Payments // ✅ Added for Cost Icon
+    Search, AssignmentLate, PendingActions, TaskAlt,
+    FilterList, Dashboard, AccessTime, Close,
+    ReportProblem, Computer, DeleteForever, CheckCircle, Business, Person,
+    Download as DownloadIcon // ✅ Added Download Icon
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import api from '../services/api'; 
@@ -55,18 +52,20 @@ const AdminDashboard = () => {
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
-    // ✅ State for Resolution/Disposal Dialog
+    // --- Action Dialog State ---
     const [openActionDialog, setOpenActionDialog] = useState(false);
     const [actionType, setActionType] = useState(null); 
     const [resolutionText, setResolutionText] = useState('');
-    const [repairCost, setRepairCost] = useState(''); // ✅ NEW: State for Cost
+    const [repairCost, setRepairCost] = useState(''); 
 
     const myId = parseInt(localStorage.getItem('userId'));
     const adminName = localStorage.getItem('username') || 'Administrator';
 
     // --- Fetch Data ---
-    const fetchTickets = async () => {
+    const fetchTickets = async (isBackground = false) => {
         try {
+            if (!isBackground) setLoading(true);
+
             const response = await api.get('/tickets');
             const allData = response.data;
 
@@ -89,17 +88,23 @@ const AdminDashboard = () => {
             });
 
             setTickets(dashboardList);
-            setFilteredTickets(dashboardList);
+            if (!searchQuery) {
+                setFilteredTickets(dashboardList);
+            }
 
         } catch (error) {
             console.error(error);
-            toast.error("Failed to load tickets");
+            if (!isBackground) toast.error("Failed to load tickets");
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { fetchTickets(); }, []);
+    useEffect(() => {
+        fetchTickets(); 
+        const intervalId = setInterval(() => { fetchTickets(true); }, 5000); 
+        return () => clearInterval(intervalId); 
+    }, []);
 
     // --- Search Logic ---
     useEffect(() => {
@@ -132,7 +137,7 @@ const AdminDashboard = () => {
     const openResolutionPrompt = (type) => {
         setActionType(type);
         setResolutionText('');
-        setRepairCost(''); // ✅ Reset cost when opening
+        setRepairCost(''); 
         setOpenActionDialog(true);
     };
 
@@ -142,7 +147,6 @@ const AdminDashboard = () => {
             return;
         }
 
-        // ✅ Updated Payload to include Cost
         const payload = {
             resolution: resolutionText,
             cost: actionType === 'RESOLVE' ? (parseFloat(repairCost) || 0) : 0, 
@@ -160,9 +164,14 @@ const AdminDashboard = () => {
         }
     };
 
-    const handlePrintTicket = (e, ticket) => {
-        e.stopPropagation();
-        // ... (Keep existing print logic)
+    // ✅ NEW: Download Image Function
+    const downloadImage = (base64Data, index) => {
+        const link = document.createElement("a");
+        link.href = base64Data;
+        link.download = `Evidence_Img_${index + 1}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const getCardStyles = (ticket) => {
@@ -288,6 +297,41 @@ const AdminDashboard = () => {
                                         <Typography variant="h6" fontWeight="bold" gutterBottom>{selectedTicket.subject}</Typography>
                                         <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{selectedTicket.description}</Typography>
                                     </Box>
+
+                                    {/* ✅ ADDED: EVIDENCE SECTION */}
+                                    {selectedTicket.images && selectedTicket.images.length > 0 && (
+                                        <Box mb={4}>
+                                            <Typography variant="caption" fontWeight="bold" color="textSecondary" display="block" mb={1}>
+                                                EVIDENCE
+                                            </Typography>
+                                            <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 1 }}>
+                                                {selectedTicket.images.map((img, idx) => (
+                                                    <Box key={idx} position="relative" sx={{ flexShrink: 0 }}>
+                                                        <Box 
+                                                            component="img" 
+                                                            src={img.base64Data} 
+                                                            onClick={() => window.open(img.base64Data)}
+                                                            sx={{ 
+                                                                width: 80, height: 80, borderRadius: 2, 
+                                                                border: '2px solid #e2e8f0', objectFit: 'cover', 
+                                                                cursor: 'zoom-in', '&:hover': { borderColor: '#3b82f6' } 
+                                                            }} 
+                                                        />
+                                                        <Tooltip title="Download">
+                                                            <IconButton 
+                                                                size="small" 
+                                                                onClick={(e) => { e.stopPropagation(); downloadImage(img.base64Data, idx); }}
+                                                                sx={{ position: 'absolute', bottom: -8, right: -8, bgcolor: 'white', border: '1px solid #ddd', boxShadow: 2 }}
+                                                            >
+                                                                <DownloadIcon fontSize="small" color="primary" />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </Box>
+                                                ))}
+                                            </Stack>
+                                        </Box>
+                                    )}
+
                                     {selectedTicket.asset && (
                                         <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, display: 'flex', alignItems: 'center', gap: 2, borderLeft: '4px solid #3b82f6' }}>
                                             <Avatar variant="rounded" sx={{ bgcolor: '#eff6ff', color: '#3b82f6' }}><Computer/></Avatar>
@@ -313,89 +357,30 @@ const AdminDashboard = () => {
                     )}
                 </Dialog>
 
-                {/* ✅ 6. UPDATED RESOLUTION / DISPOSAL DIALOG WITH COST FIELD */}
-                <Dialog 
-                    open={openActionDialog} 
-                    onClose={() => setOpenActionDialog(false)} 
-                    maxWidth="sm" 
-                    fullWidth
-                    PaperProps={{ sx: { borderRadius: 3 } }}
-                >
-                    <DialogTitle sx={{ 
-                        bgcolor: actionType === 'DISPOSE' ? '#fee2e2' : '#f0fdf4', 
-                        color: actionType === 'DISPOSE' ? '#b91c1c' : '#15803d', 
-                        fontWeight: '800',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1.5
-                    }}>
+                {/* 6. ACTION DIALOG (Resolve/Dispose) */}
+                <Dialog open={openActionDialog} onClose={() => setOpenActionDialog(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                    <DialogTitle sx={{ bgcolor: actionType === 'DISPOSE' ? '#fee2e2' : '#f0fdf4', color: actionType === 'DISPOSE' ? '#b91c1c' : '#15803d', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         {actionType === 'DISPOSE' ? <DeleteForever /> : <CheckCircle />}
                         {actionType === 'DISPOSE' ? 'Confirm Asset Disposal' : 'Complete Ticket Resolution'}
                     </DialogTitle>
-                    
                     <DialogContent sx={{ mt: 2 }}>
                         <Stack spacing={3}>
-                            {actionType === 'DISPOSE' && (
-                                <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
-                                    <strong>Warning:</strong> This will permanently mark the asset as <strong>DISPOSED</strong>.
-                                </Alert>
-                            )}
-
+                            {actionType === 'DISPOSE' && (<Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}><strong>Warning:</strong> This will permanently mark the asset as <strong>DISPOSED</strong>.</Alert>)}
                             <Box>
-                                <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>
-                                    Action Details
-                                </Typography>
-                                <TextField
-                                    autoFocus
-                                    placeholder={actionType === 'DISPOSE' ? "Explain why this asset cannot be repaired..." : "Explain exactly what was fixed..."}
-                                    fullWidth
-                                    multiline
-                                    rows={4}
-                                    value={resolutionText}
-                                    onChange={(e) => setResolutionText(e.target.value)}
-                                    variant="outlined"
-                                    sx={{ bgcolor: '#f8fafc' }}
-                                />
+                                <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>Action Details</Typography>
+                                <TextField autoFocus placeholder={actionType === 'DISPOSE' ? "Explain why this asset cannot be repaired..." : "Explain exactly what was fixed..."} fullWidth multiline rows={4} value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} variant="outlined" sx={{ bgcolor: '#f8fafc' }} />
                             </Box>
-
-                            {/* ✅ NEW: Repair Cost Field (Only shows during Resolve) */}
                             {actionType === 'RESOLVE' && (
                                 <Box>
-                                    <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>
-                                        Financial Details
-                                    </Typography>
-                                    <TextField
-                                        label="Total Repair Cost"
-                                        fullWidth
-                                        type="number"
-                                        value={repairCost}
-                                        onChange={(e) => setRepairCost(e.target.value)}
-                                        placeholder="0.00"
-                                        InputProps={{
-                                            startAdornment: (
-                                                <InputAdornment position="start">
-                                                    <Typography fontWeight="bold" color="primary">Rs.</Typography>
-                                                </InputAdornment>
-                                            ),
-                                            sx: { borderRadius: 2, bgcolor: '#f8fafc', fontWeight: 'bold' }
-                                        }}
-                                        helperText="Include parts, labor, and external service fees."
-                                    />
+                                    <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>Financial Details</Typography>
+                                    <TextField label="Total Repair Cost" fullWidth type="number" value={repairCost} onChange={(e) => setRepairCost(e.target.value)} placeholder="0.00" InputProps={{ startAdornment: (<InputAdornment position="start"><Typography fontWeight="bold" color="primary">Rs.</Typography></InputAdornment>), sx: { borderRadius: 2, bgcolor: '#f8fafc', fontWeight: 'bold' } }} helperText="Include parts, labor, and external service fees." />
                                 </Box>
                             )}
                         </Stack>
                     </DialogContent>
-                    
                     <DialogActions sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
                         <Button onClick={() => setOpenActionDialog(false)} sx={{ color: '#64748b', fontWeight: 'bold' }}>Cancel</Button>
-                        <Button 
-                            onClick={submitResolution} 
-                            variant="contained" 
-                            size="large"
-                            color={actionType === 'DISPOSE' ? 'error' : 'success'}
-                            disabled={!resolutionText.trim()}
-                            sx={{ px: 4, fontWeight: '800', borderRadius: 2 }}
-                        >
+                        <Button onClick={submitResolution} variant="contained" size="large" color={actionType === 'DISPOSE' ? 'error' : 'success'} disabled={!resolutionText.trim()} sx={{ px: 4, fontWeight: '800', borderRadius: 2 }}>
                             {actionType === 'DISPOSE' ? 'Confirm Disposal' : 'Submit & Close Ticket'}
                         </Button>
                     </DialogActions>

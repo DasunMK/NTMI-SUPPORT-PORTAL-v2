@@ -18,6 +18,13 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     List<Ticket> findByStatus(TicketStatus status);
     
     List<Ticket> findByBranch_BranchIdAndStatusNot(Long branchId, TicketStatus status);
+
+    // ✅ NEW: Find tickets created by a specific user (For Branch User Profile)
+    List<Ticket> findByCreatedBy_UserIdOrderByCreatedAtDesc(Long userId);
+
+    // ✅ NEW: Find tickets assigned to a specific admin (For Admin Profile)
+    List<Ticket> findByAssignedAdmin_UserIdOrderByCreatedAtDesc(Long userId);
+
     // --- GLOBAL COUNTS (For Admin Dashboard) ---
     long countByCreatedAtAfter(LocalDateTime date);
     long countByClosedAtAfter(LocalDateTime date);
@@ -35,4 +42,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     @Query("SELECT t FROM Ticket t WHERE t.status = 'RESOLVED' AND t.resolvedAt IS NOT NULL")
     List<Ticket> findAllResolvedTickets();
+
+    List<Ticket> findByCreatedAtAfter(LocalDateTime date);
+List<Ticket> findByBranch_BranchIdAndCreatedAtAfter(Long branchId, LocalDateTime date);
 }

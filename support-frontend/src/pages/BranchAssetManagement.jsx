@@ -17,7 +17,7 @@ import api from '../services/api';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 
-// --- UTILITY ---
+
 const getWarrantyDaysLeft = (expiryDate) => {
     if (!expiryDate) return null;
     const today = new Date();
@@ -51,8 +51,7 @@ const StatCard = ({ title, count, icon, color }) => (
 
 const BranchAssetManagement = () => {
     const navigate = useNavigate();
-    
-    // --- State ---
+
     const [assets, setAssets] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL');
@@ -63,7 +62,6 @@ const BranchAssetManagement = () => {
     const [repairHistory, setRepairHistory] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
-    // ✅ FORCE BRANCH ID (No Admin 'ALL' option)
     const myBranchId = localStorage.getItem('branchId');
 
     useEffect(() => {
@@ -76,12 +74,10 @@ const BranchAssetManagement = () => {
 
     const fetchMyAssets = async () => {
         try {
-            // This calls the endpoint we secured in AssetController
             const res = await api.get(`/assets/branch/${myBranchId}`);
             setAssets(res.data);
         } catch (error) {
             console.error("Failed to load assets", error);
-            // If 403, it means Backend @PreAuthorize failed
             if (error.response && error.response.status === 403) {
                 toast.error("Access Denied: You don't have permission to view this branch.");
             }
@@ -109,7 +105,7 @@ const BranchAssetManagement = () => {
         });
     };
 
-    // --- Filtering ---
+    
     const filteredAssets = assets.filter(asset => {
         const lowerQ = searchQuery.toLowerCase();
         const matchesSearch = asset.assetCode.toLowerCase().includes(lowerQ) || 
@@ -168,7 +164,7 @@ const BranchAssetManagement = () => {
                         <Avatar sx={{ width: 64, height: 64, bgcolor: 'rgba(255,255,255,0.15)' }}><Inventory /></Avatar>
                         <Box>
                             <Typography variant="h4" fontWeight="800">My Branch Assets</Typography>
-                            <Typography variant="body1" sx={{ opacity: 0.8 }}>Viewing inventory for your location only.</Typography>
+                            <Typography variant="body1" sx={{ opacity: 0.8 }}>Inventory for your Branch</Typography>
                         </Box>
                     </Box>
                     <Button variant="outlined" startIcon={<Download />} onClick={generatePDF} sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
@@ -177,12 +173,12 @@ const BranchAssetManagement = () => {
                 </Stack>
             </Paper>
 
-            {/* KPI STATS */}
+            
             <Grid container spacing={3} mb={5}>
                 <Grid item xs={12} sm={6} md={3}><StatCard title="Total Devices" count={stats.total} icon={<Inventory />} color="#334155" /></Grid>
                 <Grid item xs={12} sm={6} md={3}><StatCard title="Working" count={stats.active} icon={<CheckCircle />} color="#10b981" /></Grid>
                 <Grid item xs={12} sm={6} md={3}><StatCard title="In Repair" count={stats.repair} icon={<Build />} color="#f59e0b" /></Grid>
-                <Grid item xs={12} sm={6} md={3}><StatCard title="Written Off" count={stats.disposed} icon={<DeleteForever />} color="#e11d48" /></Grid>
+                <Grid item xs={12} sm={6} md={3}><StatCard title="Disposed" count={stats.disposed} icon={<DeleteForever />} color="#e11d48" /></Grid>
             </Grid>
 
             {/* FILTERS */}
@@ -201,10 +197,9 @@ const BranchAssetManagement = () => {
                 <Table>
                     <TableHead sx={{ bgcolor: '#f8fafc' }}>
                         <TableRow>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>ASSET CODE</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>ASSET Reg No.</TableCell>
                             <TableCell sx={{ fontWeight: '800', color: '#475569' }}>DEVICE</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>SERIAL NO</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>WARRANTY</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>WARRANTY DAYS LEFT</TableCell>
                             <TableCell sx={{ fontWeight: '800', color: '#475569' }}>STATUS</TableCell>
                             <TableCell align="right" sx={{ fontWeight: '800', color: '#475569' }}>ACTIONS</TableCell>
                         </TableRow>
@@ -222,7 +217,7 @@ const BranchAssetManagement = () => {
                                         <Typography variant="body2" fontWeight="700">{asset.brand}</Typography>
                                         <Typography variant="caption" color="textSecondary">{asset.model}</Typography>
                                     </TableCell>
-                                    <TableCell>{asset.serialNumber}</TableCell>
+                                    
                                     <TableCell>
                                         {daysLeft !== null ? (
                                             <Chip size="small" icon={<EventBusy sx={{ fontSize: '14px !important' }} />} label={daysLeft > 0 ? `${daysLeft} Days` : 'Expired'} color={daysLeft < 30 ? "error" : "default"} sx={{ fontWeight: 'bold' }} />
@@ -246,7 +241,7 @@ const BranchAssetManagement = () => {
                 </Table>
             </TableContainer>
 
-            {/* MAINTENANCE HISTORY DIALOG (READ ONLY) */}
+            {/* MAINTENANCE HISTORY DIALOG */}
             <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Maintenance Log</DialogTitle>
                 <DialogContent>

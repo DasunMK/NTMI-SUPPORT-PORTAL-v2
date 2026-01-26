@@ -6,12 +6,11 @@ import {
 } from '@mui/material';
 import { 
     Delete, Add, Business, Category, AssignmentLate, Settings as SettingsIcon, 
-    LocationOn, Devices, Smartphone, Label, Computer, Phone // ✅ Added Phone Icon
+    LocationOn, Devices, Smartphone, Label, Computer, Phone 
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import api from '../services/api';
 
-// --- Helper Component (Defined Outside) ---
 const SimpleList = ({ title, placeholder, value, setValue, onAdd, items, onDelete, icon }) => (
     <Card elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 3, height: '100%' }}>
         <CardContent>
@@ -40,7 +39,7 @@ const SimpleList = ({ title, placeholder, value, setValue, onAdd, items, onDelet
 const Settings = () => {
     const [tabIndex, setTabIndex] = useState(0);
     
-    // --- Data States ---
+ 
     const [branches, setBranches] = useState([]);
     const [categories, setCategories] = useState([]);
     const [types, setTypes] = useState([]);
@@ -48,25 +47,25 @@ const Settings = () => {
     const [models, setModels] = useState([]);
     const [deviceTypes, setDeviceTypes] = useState([]);
 
-    // --- Branch Inputs ---
+
     const [branchName, setBranchName] = useState('');
     const [branchCode, setBranchCode] = useState('');
     const [branchLocation, setBranchLocation] = useState('');
     const [branchContact, setBranchContact] = useState(''); // ✅ NEW STATE
 
-    // --- Other Inputs ---
+
     const [newCategory, setNewCategory] = useState('');
     const [newType, setNewType] = useState('');
     const [selectedCatForType, setSelectedCatForType] = useState('');
     
-    // --- Device Management Inputs ---
+
     const [newBrand, setNewBrand] = useState('');
     const [newDeviceType, setNewDeviceType] = useState('');
     const [selectedBrandForModel, setSelectedBrandForModel] = useState('');
     const [selectedDeviceTypeForModel, setSelectedDeviceTypeForModel] = useState(''); 
     const [newModelName, setNewModelName] = useState('');
 
-    // --- FETCH DATA ---
+
     const fetchData = async () => {
         try {
             const [bRes, cRes, tRes, brRes, moRes, dtRes] = await Promise.all([
@@ -91,9 +90,7 @@ const Settings = () => {
 
     useEffect(() => { fetchData(); }, []);
 
-    // --- HANDLERS ---
-
-    // 1. Branches Handler
+   
     const handleAddBranch = async () => {
         if (!branchName || !branchCode) return toast.warning("Name and Code required");
         try { 
@@ -101,17 +98,17 @@ const Settings = () => {
                 branchName, 
                 branchCode, 
                 location: branchLocation || "Main Office",
-                contactNumber: branchContact // ✅ SENDING CONTACT
+                contactNumber: branchContact 
             }); 
             toast.success("Branch Added"); 
-            // Reset Fields
+           
             setBranchName(''); setBranchCode(''); setBranchLocation(''); setBranchContact(''); 
             fetchData(); 
         } catch (e) { toast.error("Failed"); }
     };
     const handleDeleteBranch = async (id) => { if(!window.confirm("Delete?")) return; try { await api.delete(`/settings/branches/${id}`); toast.success("Deleted"); fetchData(); } catch (e) { toast.error("In Use"); } };
 
-    // ... (Other handlers remain exactly the same: Category, Type, Brand, DeviceType, Model) ...
+    
     const handleAddCategory = async () => { if (!newCategory) return; try { await api.post('/settings/categories', { categoryName: newCategory }); toast.success("Added"); setNewCategory(''); fetchData(); } catch (e) { toast.error("Failed"); } };
     const handleDeleteCategory = async (id) => { if(!window.confirm("Delete?")) return; try { await api.delete(`/settings/categories/${id}`); toast.success("Deleted"); fetchData(); } catch (e) { toast.error("In Use"); } };
     const handleAddType = async () => { if (!newType || !selectedCatForType) return toast.warning("Select category & name"); try { await api.post('/settings/types', { typeName: newType, category: { categoryId: selectedCatForType } }); toast.success("Added"); setNewType(''); fetchData(); } catch (e) { toast.error("Failed"); } };
@@ -131,7 +128,7 @@ const Settings = () => {
         <Fade in={true} timeout={600}>
             <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
                 
-                {/* HERO HEADER */}
+                {/* HEADER */}
                 <Paper elevation={0} sx={{ p: 4, mb: 4, borderRadius: 4, background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: 'white', display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Box p={1.5} bgcolor="rgba(255,255,255,0.1)" borderRadius={2}><SettingsIcon fontSize="large" /></Box>
                     <Box>
@@ -140,7 +137,7 @@ const Settings = () => {
                     </Box>
                 </Paper>
 
-                {/* TABS */}
+                
                 <Paper sx={{ mb: 4, borderRadius: 3, overflow: 'hidden' }} elevation={0} variant="outlined">
                     <Tabs value={tabIndex} onChange={(e, val) => setTabIndex(val)} indicatorColor="primary" textColor="primary" variant="fullWidth" sx={{ bgcolor: '#f8fafc' }}>
                         <Tab icon={<Business />} label="Branches" sx={{ fontWeight: 'bold', py: 3 }} />
@@ -150,7 +147,7 @@ const Settings = () => {
                     </Tabs>
                 </Paper>
 
-                {/* --- TAB 1: BRANCHES --- */}
+                {/* BRANCHES */}
                 {tabIndex === 0 && (
                     <Grid container spacing={4}>
                         <Grid item xs={12} md={4}>
@@ -161,8 +158,6 @@ const Settings = () => {
                                         <TextField fullWidth size="small" label="Branch Code" placeholder="e.g. B001" value={branchCode} onChange={(e) => setBranchCode(e.target.value)} />
                                         <TextField fullWidth size="small" label="Branch Name" placeholder="e.g. Colombo Main" value={branchName} onChange={(e) => setBranchName(e.target.value)} />
                                         <TextField fullWidth size="small" label="Location" placeholder="Address/City" value={branchLocation} onChange={(e) => setBranchLocation(e.target.value)} />
-                                        
-                                        {/* ✅ NEW CONTACT INPUT */}
                                         <TextField fullWidth size="small" label="Contact Number" placeholder="e.g. 011-2345678" value={branchContact} onChange={(e) => setBranchContact(e.target.value)} />
                                         
                                         <Button fullWidth variant="contained" onClick={handleAddBranch} startIcon={<Add />}>Add Branch</Button>
@@ -181,7 +176,6 @@ const Settings = () => {
                                                     <Chip label={b.branchCode} size="small" sx={{ borderRadius: 1, fontWeight: 'bold', height: 20, fontSize: '0.7rem' }} />
                                                     <Typography variant="caption" color="textSecondary"><LocationOn sx={{ fontSize: 14, verticalAlign: 'middle' }} /> {b.location || '-'}</Typography>
                                                 </Box>
-                                                {/* ✅ NEW CONTACT DISPLAY */}
                                                 {b.contactNumber && (
                                                     <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
                                                         <Phone sx={{ fontSize: 14, color: 'text.secondary' }} />
@@ -198,7 +192,7 @@ const Settings = () => {
                     </Grid>
                 )}
 
-                {/* TAB 2, 3, 4 (Categories, Error Types, Device Management) */}
+               
                 {tabIndex === 1 && (
                     <Grid container spacing={4}><Grid item xs={12} md={4}><SimpleList title="Add Category" placeholder="Category Name" value={newCategory} setValue={setNewCategory} onAdd={handleAddCategory} items={[]} onDelete={()=>{}}/></Grid><Grid item xs={12} md={8}><Paper elevation={0} sx={{p:3,border:'1px solid #e2e8f0',borderRadius:3}}><Typography fontWeight="bold" mb={2}>ACTIVE CATEGORIES</Typography><Box display="flex" flexWrap="wrap" gap={1}>{categories.map(c=><Chip key={c.categoryId} label={c.categoryName} onDelete={()=>handleDeleteCategory(c.categoryId)} deleteIcon={<Delete/>} sx={{fontWeight:'bold',borderRadius:2}}/ >)}</Box></Paper></Grid></Grid>
                 )}

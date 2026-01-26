@@ -7,6 +7,6 @@ import java.util.List;
 
 @Repository
 public interface CommentRepository extends JpaRepository<Comment, Long> {
-    // Fetch comments for a specific ticket, sorted like a chat (Oldest first)
+    // Fetch comments for a specific ticket, sorted by Oldest First (Chat style)
     List<Comment> findByTicket_TicketIdOrderByCreatedAtAsc(Long ticketId);
 }

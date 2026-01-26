@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { 
-    Container, Box, TextField, Button, Typography, Paper, 
-    InputAdornment, IconButton, CircularProgress, Stack 
+    Box, TextField, Button, Typography, Paper, 
+    InputAdornment, IconButton, CircularProgress, Stack, Fade, Container 
 } from '@mui/material';
 import { 
     Visibility, VisibilityOff, Person, Lock, 
-    Login as LoginIcon, Security 
+    Login as LoginIcon
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api'; 
+
+// High-quality background image
+const BG_IMAGE = "https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop";
 
 const Login = () => {
     const navigate = useNavigate();
@@ -73,143 +76,154 @@ const Login = () => {
 
     return (
         <Box 
-            sx={{
-                minHeight: '100vh',
+            sx={{ 
+                height: '100vh', 
+                width: '100vw',
+                overflow: 'hidden',
+                backgroundImage: `url(${BG_IMAGE})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                p: 2
+                justifyContent: 'center'
             }}
         >
-            <Container maxWidth="xs">
-                <Paper 
-                    elevation={10} 
-                    sx={{ 
-                        p: 4, 
-                        borderRadius: 4, 
-                        backdropFilter: 'blur(10px)',
-                        bgcolor: 'rgba(255, 255, 255, 0.95)',
-                        border: '1px solid rgba(255, 255, 255, 0.3)',
-                        overflow: 'hidden',
-                        position: 'relative'
-                    }}
-                >
-                    <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 6, background: 'linear-gradient(90deg, #2563eb, #9333ea)' }} />
+            {/* Dark Overlay for readability */}
+            <Box 
+                sx={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.95) 100%)',
+                    zIndex: 1
+                }}
+            />
 
-                    <Box textAlign="center" mb={4}>
-                        <Box 
-                            sx={{ 
-                                width: 60, height: 60, borderRadius: '50%', 
-                                bgcolor: '#eff6ff', color: '#2563eb', 
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                mx: 'auto', mb: 2
-                            }}
-                        >
-                            <Security fontSize="large" />
-                        </Box>
-                        <Typography variant="h5" fontWeight="800" color="#1e293b">
-                            NTMI Support
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                            Sign in to your account
-                        </Typography>
-                    </Box>
-
-                    <form onSubmit={handleLogin}>
-                        <Stack spacing={2.5}>
-                            <TextField
-                                label="Username"
-                                name="username"
-                                variant="outlined"
-                                fullWidth
-                                value={formData.username}
-                                onChange={handleChange}
-                                required
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Person color="action" fontSize="small" />
-                                        </InputAdornment>
-                                    ),
-                                }}
-                            />
+            {/* Login Card */}
+            <Container maxWidth="xs" sx={{ position: 'relative', zIndex: 2 }}>
+                <Fade in={true} timeout={800}>
+                    <Paper 
+                        elevation={24}
+                        sx={{ 
+                            p: 4, 
+                            borderRadius: 4, 
+                            backdropFilter: 'blur(12px)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                            boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+                            border: '1px solid rgba(255, 255, 255, 0.18)'
+                        }}
+                    >
+                        {/* Header Section */}
+                        <Box textAlign="center" mb={4}>
                             
-                            <TextField
-                                label="Password"
-                                name="password"
-                                type={showPassword ? 'text' : 'password'}
-                                variant="outlined"
-                                fullWidth
-                                value={formData.password}
-                                onChange={handleChange}
-                                required
-                                InputProps={{
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Lock color="action" fontSize="small" />
-                                        </InputAdornment>
-                                    ),
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <IconButton
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                edge="end"
-                                                size="small"
-                                            >
-                                                {showPassword ? <VisibilityOff /> : <Visibility />}
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
+                            {/* LOGO */}
+                            <Box 
+                                component="img"
+                                src="/logo.png" 
+                                alt="NTMI Logo"
+                                sx={{ 
+                                    height: 80,       
+                                    width: 'auto',
+                                    maxWidth: '100%',
+                                    mb: 2,
+                                    objectFit: 'contain'
                                 }}
                             />
 
-                            {/* ✅ FIXED: Forgot Password Link */}
-                            <Box display="flex" justifyContent="flex-end">
-                                <Typography
-                                    variant="caption"
-                                    onClick={() => navigate('/help', { state: { focus: 'panel1' } })}
+                            <Typography variant="h5" fontWeight="800" color="#1e293b">
+                                NTMI Support Portal
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                                Sign in to access the system
+                            </Typography>
+                        </Box>
+
+                        {/* Login Form */}
+                        <form onSubmit={handleLogin}>
+                            <Stack spacing={3}>
+                                <TextField
+                                    label="Username"
+                                    name="username"
+                                    fullWidth
+                                    value={formData.username}
+                                    onChange={handleChange}
+                                    required
+                                    autoFocus
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <Person color="primary" />
+                                            </InputAdornment>
+                                        ),
+                                        sx: { borderRadius: 3 }
+                                    }}
+                                />
+                                
+                                <Box>
+                                    <TextField
+                                        label="Password"
+                                        name="password"
+                                        type={showPassword ? 'text' : 'password'}
+                                        fullWidth
+                                        value={formData.password}
+                                        onChange={handleChange}
+                                        required
+                                        InputProps={{
+                                            startAdornment: (
+                                                <InputAdornment position="start">
+                                                    <Lock color="primary" />
+                                                </InputAdornment>
+                                            ),
+                                            endAdornment: (
+                                                <InputAdornment position="end">
+                                                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                                                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                                                    </IconButton>
+                                                </InputAdornment>
+                                            ),
+                                            sx: { borderRadius: 3 }
+                                        }}
+                                    />
+                                    <Box display="flex" justifyContent="flex-end" mt={1}>
+                                        <Typography
+                                            variant="caption"
+                                            // ✅ UPDATED: Opens /help in a new tab
+                                            onClick={() => window.open('/help', '_blank')}
+                                            sx={{ 
+                                                fontWeight: 'bold', color: 'primary.main', cursor: 'pointer',
+                                                '&:hover': { textDecoration: 'underline' }
+                                            }}
+                                        >
+                                            Forgot password?
+                                        </Typography>
+                                    </Box>
+                                </Box>
+
+                                <Button 
+                                    type="submit" 
+                                    fullWidth 
+                                    variant="contained" 
+                                    size="large"
+                                    disabled={loading}
+                                    startIcon={!loading && <LoginIcon />}
                                     sx={{ 
-                                        fontWeight: 'bold', 
-                                        color: '#2563eb', 
-                                        cursor: 'pointer',
-                                        '&:hover': { textDecoration: 'underline' }
+                                        py: 1.5, borderRadius: 3, fontWeight: 'bold', fontSize: '1rem',
+                                        background: 'linear-gradient(to right, #2563eb, #4f46e5)',
+                                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                                        '&:hover': { background: 'linear-gradient(to right, #1d4ed8, #4338ca)' }
                                     }}
                                 >
-                                    Forgot Password?
-                                </Typography>
-                            </Box>
+                                    {loading ? <CircularProgress size={26} color="inherit" /> : 'Log in'}
+                                </Button>
+                            </Stack>
+                        </form>
 
-                            <Button 
-                                type="submit" 
-                                variant="contained" 
-                                fullWidth 
-                                size="large"
-                                disabled={loading}
-                                startIcon={!loading && <LoginIcon />}
-                                sx={{ 
-                                    py: 1.5, 
-                                    fontWeight: 'bold', 
-                                    textTransform: 'none',
-                                    fontSize: '1rem',
-                                    borderRadius: 2,
-                                    background: 'linear-gradient(to right, #2563eb, #1d4ed8)',
-                                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-                                    transition: 'all 0.2s',
-                                    '&:hover': { transform: 'translateY(-1px)', boxShadow: '0 6px 16px rgba(37, 99, 235, 0.4)' }
-                                }}
-                            >
-                                {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
-                            </Button>
-                        </Stack>
-                    </form>
-
-                    <Box mt={4} textAlign="center">
-                        <Typography variant="caption" color="textSecondary">
-                            © 2026 National Transport Medical Institute
-                        </Typography>
-                    </Box>
-                </Paper>
+                        <Box mt={4} textAlign="center">
+                            <Typography variant="caption" color="text.disabled">
+                                © 2026 National Transport Medical Institute
+                            </Typography>
+                        </Box>
+                    </Paper>
+                </Fade>
             </Container>
         </Box>
     );

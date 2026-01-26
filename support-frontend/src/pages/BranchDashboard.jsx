@@ -13,7 +13,6 @@ import { toast } from 'react-toastify';
 import api from '../services/api';
 import TicketComments from '../components/TicketComments'; 
 
-// --- 1. MODERN KPI CARD COMPONENT ---
 const KpiCard = ({ title, value, icon, color, subtitle }) => (
     <Paper 
         elevation={0} 
@@ -39,9 +38,9 @@ const KpiCard = ({ title, value, icon, color, subtitle }) => (
 
 const getStatusColor = (status) => {
     switch (status) {
-        case 'OPEN': return '#d32f2f'; // Red
-        case 'IN_PROGRESS': return '#ed6c02'; // Orange
-        case 'RESOLVED': return '#2e7d32'; // Green
+        case 'OPEN': return '#d32f2f'; 
+        case 'IN_PROGRESS': return '#ed6c02'; 
+        case 'RESOLVED': return '#2e7d32'; 
         default: return '#1976d2';
     }
 };
@@ -57,15 +56,18 @@ const BranchDashboard = () => {
 
     const branchName = localStorage.getItem('branchName') || 'My Branch';
 
-    const fetchDashboardData = async () => {
+    // ✅ FIXED: Added isBackground parameter for silent refresh
+    const fetchDashboardData = async (isBackground = false) => {
         try {
             const branchId = localStorage.getItem('branchId');
             if (!branchId) return;
 
+            // Only show spinner on first load
+            if (!isBackground) setLoading(true);
+
             const response = await api.get(`/tickets/branch/${branchId}`);
             const allTickets = response.data;
 
-            // Stats Calculation
             setStats({
                 total: allTickets.length,
                 open: allTickets.filter(t => t.status === 'OPEN').length,
@@ -73,7 +75,6 @@ const BranchDashboard = () => {
                 resolved: allTickets.filter(t => t.status === 'RESOLVED').length
             });
             
-            // Show Active Tickets Only
             const activeTickets = allTickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS');
             const sortedTickets = activeTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setTickets(sortedTickets);
@@ -85,9 +86,17 @@ const BranchDashboard = () => {
         }
     };
 
-    useEffect(() => { fetchDashboardData(); }, []);
+    // ✅ FIXED: Added interval for 5-second auto-refresh
+    useEffect(() => {
+        fetchDashboardData(); // Initial Load
 
-    // --- Handlers ---
+        const interval = setInterval(() => {
+            fetchDashboardData(true); // Silent Refresh
+        }, 5000); 
+
+        return () => clearInterval(interval); // Cleanup
+    }, []);
+
     const handleTicketClick = (ticket) => {
         setSelectedTicket(ticket);
         setOpenDialog(true);
@@ -121,7 +130,7 @@ const BranchDashboard = () => {
         document.body.removeChild(link);
     };
 
-    // --- Card Styles ---
+    // Card Styles 
     const getCardStyles = (status) => {
         if (status === 'IN_PROGRESS') return { bg: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)', border: '#3b82f6', iconColor: '#3b82f6', statusColor: 'primary' };
         if (status === 'OPEN') return { bg: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)', border: '#ef4444', iconColor: '#ef4444', statusColor: 'error' };
@@ -134,7 +143,7 @@ const BranchDashboard = () => {
         <Fade in={true} timeout={800}>
             <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
                 
-                {/* 1. HERO HEADER */}
+                {/* HEADER */}
                 <Paper 
                     elevation={0}
                     sx={{ 
@@ -155,7 +164,7 @@ const BranchDashboard = () => {
                                     {branchName} Dashboard
                                 </Typography>
                                 <Typography variant="body1" sx={{ opacity: 0.8, fontWeight: 500 }}>
-                                    Track, manage, and resolve IT support requests.
+                                    IT support
                                 </Typography>
                             </Box>
                         </Box>
@@ -176,7 +185,6 @@ const BranchDashboard = () => {
                     </Box>
                 </Paper>
 
-                {/* 2. KPI STATS */}
                 <Grid container spacing={3} mb={6}>
                     <Grid item xs={12} sm={6} md={3}><KpiCard title="Total Tickets" value={stats.total} icon={<ConfirmationNumber />} color="#1976d2" subtitle="All Time" /></Grid>
                     <Grid item xs={12} sm={6} md={3}><KpiCard title="Pending Review" value={stats.open} icon={<PendingActions />} color="#d32f2f" subtitle="Awaiting Action" /></Grid>
@@ -188,7 +196,7 @@ const BranchDashboard = () => {
                     Active Requests
                 </Typography>
 
-                {/* 3. TICKET GRID */}
+                {/* TICKET GRID */}
                 {tickets.length === 0 ? (
                     <Box textAlign="center" py={8} bgcolor="#f8fafc" borderRadius={4} border="2px dashed #e2e8f0">
                         <CheckCircle sx={{ fontSize: 60, color: '#22c55e', mb: 2, opacity: 0.5 }} />
@@ -241,7 +249,7 @@ const BranchDashboard = () => {
                     </Grid>
                 )}
 
-                {/* 4. DETAILS DIALOG */}
+                {/* DETAILS DIALOG */}
                 <Dialog 
                     open={openDialog} 
                     onClose={handleCloseDialog} 
@@ -250,7 +258,7 @@ const BranchDashboard = () => {
                 >
                     {selectedTicket && (
                         <>
-                            {/* Header */}
+                           
                             <Box sx={{ p: 3, borderBottom: '1px solid #e2e8f0', bgcolor: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Box display="flex" alignItems="center" gap={2}>
                                     <Avatar sx={{ bgcolor: selectedTicket.status === 'OPEN' ? '#fee2e2' : '#dcfce7', color: selectedTicket.status === 'OPEN' ? '#b91c1c' : '#15803d' }}>
@@ -268,7 +276,6 @@ const BranchDashboard = () => {
                             </Box>
 
                             <DialogContent sx={{ p: 0, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, height: '100%' }}>
-                                {/* Left Side: Details */}
                                 <Box sx={{ flex: 1, p: 4, overflowY: 'auto', borderRight: '1px solid #e2e8f0' }}>
                                     <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
                                         <Typography variant="subtitle2" fontWeight="bold">Subject: {selectedTicket.subject}</Typography>
@@ -279,7 +286,7 @@ const BranchDashboard = () => {
                                         <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>{selectedTicket.description}</Typography>
                                     </Paper>
 
-                                    {/* Evidence Images */}
+                                    {/* Images */}
                                     {selectedTicket.images && selectedTicket.images.length > 0 && (
                                         <Box mb={3}>
                                             <Typography variant="caption" fontWeight="bold" color="textSecondary" display="block" mb={1}>EVIDENCE</Typography>
@@ -301,11 +308,11 @@ const BranchDashboard = () => {
                                     )}
                                 </Box>
 
-                                {/* Right Side: Comments */}
+                               
                                 <Box sx={{ width: { xs: '100%', md: '400px' }, display: 'flex', flexDirection: 'column', bgcolor: '#f8fafc' }}>
                                     <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}><TicketComments ticketId={selectedTicket.ticketId} /></Box>
                                     
-                                    {/* Actions Footer */}
+                                    
                                     <Box sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: 'white' }}>
                                         {selectedTicket.status === 'OPEN' && (
                                             <Button 

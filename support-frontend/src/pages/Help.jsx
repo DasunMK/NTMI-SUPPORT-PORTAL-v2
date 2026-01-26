@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Container, Typography, Box, Grid, Card, CardContent, Button, 
-    Accordion, AccordionSummary, AccordionDetails, Fade, Stack, Avatar, Paper
+    Accordion, AccordionSummary, AccordionDetails, Fade, Stack, Avatar, Paper, Divider
 } from '@mui/material';
 import { 
     ExpandMore, Phone, Email, LibraryBooks, 
-    BugReport, SupportAgent, LiveHelp, ChevronRight 
+    BugReport, SupportAgent, LiveHelp, ChevronRight,
+    Print, Wifi, History // Added meaningful icons
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -16,7 +17,7 @@ const Help = () => {
     // Default to closed, or specific panel if passed from Login
     const [expanded, setExpanded] = useState(false);
 
-    // ✅ EFFECT: Check if we came from "Forgot Password"
+    // ✅ EFFECT: Check if we came from "Forgot Password" or other links
     useEffect(() => {
         if (location.state && location.state.focus) {
             setExpanded(location.state.focus);
@@ -35,26 +36,32 @@ const Help = () => {
         setExpanded(isExpanded ? panel : false);
     };
 
+    // ✅ UPDATED: Branch-Specific FAQs
     const faqs = [
         {
             id: 'panel1',
-            question: "How do I reset my password?",
-            answer: "For security reasons, branch users cannot reset their own passwords directly. Please contact the IT Hotline at 011-258-9999 to verify your identity and request a temporary password."
+            question: "How do I reset my branch login password?",
+            answer: "For security reasons, branch accounts cannot reset passwords directly. Please have your Branch Manager contact the IT Hotline (011-258-9999) for verification and a temporary reset code."
         },
         {
             id: 'panel2',
-            question: "I uploaded the wrong screenshot. Can I delete it?",
-            answer: "To maintain an audit trail, tickets cannot be edited once submitted. Please raise a new ticket referencing the ID of the mistake, or add a comment to the existing ticket asking Admin to ignore the file."
+            question: "My branch printer is not showing up.",
+            answer: "First, ensure the printer is powered on and connected to the network. If it's a network printer, try restarting it. If the issue persists, raise a ticket under category 'Hardware' > 'Printer/Scanner'."
         },
         {
             id: 'panel3',
-            question: "What is the expected response time?",
-            answer: "We categorize response times by priority: 'Critical' (Hardware failure) issues are addressed within 2 hours. 'Medium' (Software/Access) requests are handled within 24 hours."
+            question: "The internet is very slow at our branch today.",
+            answer: "This could be a service provider issue. Please check if other counters are experiencing the same slowness. If yes, raise a 'Critical' ticket under 'Network' so our network engineers can check the line status."
         },
         {
             id: 'panel4',
-            question: "The system is running very slow.",
-            answer: "First, try clearing your browser cache (Ctrl + Shift + R). If the issue persists across multiple branch computers, it may be a network issue. Please check your router before raising a ticket."
+            question: "I attached the wrong photo to a ticket. Can I delete it?",
+            answer: "To maintain an audit trail, you cannot delete evidence once submitted. Please add a 'Comment' to the ticket clarifying which image is correct, or upload the correct one in the comments."
+        },
+        {
+            id: 'panel5',
+            question: "Can I escalate a pending ticket?",
+            answer: "If a ticket has been 'In Progress' for more than 48 hours without an update, you can call the IT Hotline with your Ticket ID to request an escalation."
         }
     ];
 
@@ -109,14 +116,14 @@ const Help = () => {
                         <Stack direction="row" alignItems="center" gap={2} mb={2}>
                             <SupportAgent sx={{ fontSize: 40, opacity: 0.8 }} />
                             <Typography variant="overline" letterSpacing={2} sx={{ opacity: 0.8 }}>
-                                NTMI SUPPORT CENTER
+                                NTMI BRANCH SUPPORT
                             </Typography>
                         </Stack>
                         <Typography variant="h3" fontWeight="800" gutterBottom>
-                            How can we help you today?
+                            Hello, Branch User.
                         </Typography>
                         <Typography variant="h6" sx={{ opacity: 0.8, maxWidth: 600, fontWeight: 'normal' }}>
-                            Browse common questions below or contact the IT team directly for urgent matters.
+                            Need help with a device or system? Browse common solutions below or reach out to Central IT.
                         </Typography>
                     </Box>
                     
@@ -128,17 +135,17 @@ const Help = () => {
 
                 <Grid container spacing={4}>
                     
-                    {/* 2. LEFT COLUMN: DIRECT SUPPORT */}
+                    {/* 2. LEFT COLUMN: DIRECT SUPPORT & ACTIONS */}
                     <Grid item xs={12} md={4}>
                         <Typography variant="h6" fontWeight="bold" mb={3} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <LiveHelp color="primary" /> Contact Support
+                            <LiveHelp color="primary" /> Support Channels
                         </Typography>
 
                         <Stack spacing={2}>
                             <ContactCard 
                                 icon={<Phone />} 
                                 color="#2563eb"
-                                title="Urgent Hardware Issues"
+                                title="IT Hotline (Urgent)"
                                 detail="011-258-9999"
                                 subtitle="Mon-Fri • 8:00 AM - 5:00 PM"
                             />
@@ -146,14 +153,14 @@ const Help = () => {
                             <ContactCard 
                                 icon={<Email />} 
                                 color="#7c3aed"
-                                title="General Enquiries"
-                                detail="support@ntmi.lk"
-                                subtitle="Response within 24 hours"
+                                title="Email Support"
+                                detail="it.support@ntmi.lk"
+                                subtitle="For non-urgent inquiries"
                             />
 
                             <Box pt={2}>
                                 <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" mb={2} pl={1}>
-                                    ACTIONS
+                                    QUICK ACTIONS
                                 </Typography>
                                 
                                 <Button 
@@ -162,7 +169,17 @@ const Help = () => {
                                     endIcon={<ChevronRight />}
                                     sx={{ justifyContent: 'space-between', py: 1.5, mb: 2, borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
                                 >
-                                    Download User Manual
+                                    Download System Manual
+                                </Button>
+
+                                <Button 
+                                    fullWidth variant="outlined" color="secondary"
+                                    startIcon={<History />}
+                                    endIcon={<ChevronRight />}
+                                    onClick={() => navigate('/dashboard')}
+                                    sx={{ justifyContent: 'space-between', py: 1.5, mb: 2, borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
+                                >
+                                    View My Ticket History
                                 </Button>
 
                                 <Button 
@@ -171,7 +188,7 @@ const Help = () => {
                                     onClick={() => navigate('/create-ticket')}
                                     sx={{ py: 1.5, borderRadius: 2, textTransform: 'none', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(211, 47, 47, 0.3)' }}
                                 >
-                                    Report Critical Bug
+                                    Report Technical Issue
                                 </Button>
                             </Box>
                         </Stack>
@@ -180,13 +197,13 @@ const Help = () => {
                     {/* 3. RIGHT COLUMN: FAQ */}
                     <Grid item xs={12} md={8}>
                         <Typography variant="h6" fontWeight="bold" mb={3} pl={1}>
-                            Frequently Asked Questions
+                            Common Branch Issues
                         </Typography>
 
                         {faqs.map((faq) => (
                             <Accordion 
                                 key={faq.id} 
-                                id={faq.id} // ✅ Added ID for scrolling target
+                                id={faq.id} 
                                 expanded={expanded === faq.id} 
                                 onChange={handleChange(faq.id)}
                                 elevation={0}
@@ -197,19 +214,25 @@ const Help = () => {
                                     '&:before': { display: 'none' },
                                     overflow: 'hidden',
                                     transition: 'all 0.2s ease',
-                                    // Highlight effect if auto-expanded
-                                    boxShadow: expanded === faq.id ? '0 0 0 4px rgba(37, 99, 235, 0.1)' : 'none'
+                                    boxShadow: expanded === faq.id ? '0 4px 12px rgba(37, 99, 235, 0.08)' : 'none'
                                 }}
                             >
                                 <AccordionSummary 
                                     expandIcon={<ExpandMore sx={{ color: expanded === faq.id ? 'primary.main' : 'text.secondary' }} />}
                                     sx={{ bgcolor: expanded === faq.id ? '#eff6ff' : 'white' }}
                                 >
-                                    <Typography fontWeight="bold" color={expanded === faq.id ? 'primary.main' : 'text.primary'}>
-                                        {faq.question}
-                                    </Typography>
+                                    <Stack direction="row" alignItems="center" gap={1}>
+                                        {/* Icons for visual cue */}
+                                        {faq.question.includes('printer') ? <Print fontSize="small" color="action"/> :
+                                         faq.question.includes('internet') ? <Wifi fontSize="small" color="action"/> :
+                                         null}
+                                        <Typography fontWeight="bold" color={expanded === faq.id ? 'primary.main' : 'text.primary'}>
+                                            {faq.question}
+                                        </Typography>
+                                    </Stack>
                                 </AccordionSummary>
                                 <AccordionDetails sx={{ bgcolor: 'white', px: 3, pb: 3 }}>
+                                    <Divider sx={{ mb: 2, borderStyle: 'dashed' }} />
                                     <Typography variant="body2" color="textSecondary" sx={{ lineHeight: 1.6 }}>
                                         {faq.answer}
                                     </Typography>
@@ -226,7 +249,7 @@ const Help = () => {
                             }}
                         >
                             <Typography variant="body2" color="textSecondary" mb={1}>
-                                Still can't find what you're looking for?
+                                Facing a different issue?
                             </Typography>
                             <Button 
                                 onClick={() => navigate('/create-ticket')} 

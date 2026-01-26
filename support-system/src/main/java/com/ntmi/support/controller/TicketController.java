@@ -11,7 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal; // ✅ Import BigDecimal
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,11 +32,13 @@ public class TicketController {
     @Autowired private ErrorCategoryRepository categoryRepository;
     @Autowired private ErrorTypeRepository typeRepository;
     @Autowired private RepairRecordRepository repairRecordRepository;
+    
+    // ✅ NEW: Inject TicketImageRepository
+    @Autowired private TicketImageRepository ticketImageRepository; 
 
-    // --- SHARED ACTIONS (Unchanged) ---
+    // --- SHARED ACTIONS ---
     @PostMapping
     public ResponseEntity<?> createTicket(@RequestBody TicketDTO dto, Authentication auth) {
-        // ... (existing code remains the same)
         try {
             String username = auth.getName();
             User user = userRepository.findByUsername(username)
@@ -69,8 +71,22 @@ public class TicketController {
                 ticket.setBranch(user.getBranch());
             }
 
+            // 1. Save Ticket
             Ticket savedTicket = ticketRepository.save(ticket);
 
+            // ✅ 2. NEW LOGIC: Save Images
+            if (dto.getImages() != null && !dto.getImages().isEmpty()) {
+                for (String base64Image : dto.getImages()) {
+                    if (base64Image != null && !base64Image.isEmpty()) {
+                        TicketImage image = new TicketImage();
+                        image.setBase64Data(base64Image);
+                        image.setTicket(savedTicket); // Link to the saved ticket
+                        ticketImageRepository.save(image);
+                    }
+                }
+            }
+
+            // 3. Send Notification
             try {
                 notificationService.notifyAllAdmins(
                     "New Ticket #" + savedTicket.getTicketId(),
@@ -82,8 +98,21 @@ public class TicketController {
             return ResponseEntity.ok(savedTicket);
 
         } catch (Exception e) {
+            e.printStackTrace(); // Helpful for debugging
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
+    }
+
+    // ✅ NEW: Get tickets created by a specific user (For Branch User Profile)
+    @GetMapping("/created-by/{userId}")
+    public List<Ticket> getTicketsByCreator(@PathVariable Long userId) {
+        return ticketRepository.findByCreatedBy_UserIdOrderByCreatedAtDesc(userId);
+    }
+
+    // ✅ NEW: Get tickets assigned to a specific admin (For Admin Profile)
+    @GetMapping("/assigned-to/{adminId}")
+    public List<Ticket> getTicketsByAssignee(@PathVariable Long adminId) {
+        return ticketRepository.findByAssignedAdmin_UserIdOrderByCreatedAtDesc(adminId);
     }
 
     @GetMapping("/branch/{branchId}")
@@ -117,10 +146,11 @@ public class TicketController {
             assetRepository.save(asset);
         }
 
+        notificationService.send(ticket.getCreatedBy(), "Ticket In Progress", "Your ticket #" + id + " is being processed by " + admin.getFullName(), "INFO");
+
         return ResponseEntity.ok(ticket);
     }
 
-    // ✅ 5. UPDATED Close/Resolve Ticket to handle Cost
     @PreAuthorize("hasAuthority('ADMIN')")
     @PutMapping("/{id}/close")
     public ResponseEntity<?> closeTicket(@PathVariable Long id, @RequestBody Map<String, Object> payload, Authentication auth) {
@@ -130,7 +160,6 @@ public class TicketController {
         String resolutionDetails = (String) payload.get("resolution");
         boolean isDisposeRequest = "true".equals(payload.get("disposeAsset").toString());
 
-        // ✅ Extracting Cost safely
         BigDecimal cost = BigDecimal.ZERO;
         if (payload.containsKey("cost") && payload.get("cost") != null) {
             try {
@@ -140,15 +169,12 @@ public class TicketController {
             }
         }
 
-        // 1. Close Ticket
         ticket.setStatus(TicketStatus.RESOLVED);
         ticket.setResolvedAt(LocalDateTime.now());
         ticketRepository.save(ticket);
 
-        // 2. Handle Asset Logic
         if (ticket.getAsset() != null) {
             Asset asset = ticket.getAsset();
-
             if (isDisposeRequest) {
                 asset.setStatus("DISPOSED");
                 assetRepository.save(asset);
@@ -161,10 +187,11 @@ public class TicketController {
             }
         }
 
+        notificationService.send(ticket.getCreatedBy(), "Ticket Resolved", "Your ticket #" + id + " has been resolved.", "SUCCESS");
+
         return ResponseEntity.ok(ticket);
     }
 
-    // ✅ Helper method updated to accept BigDecimal cost
     private void createRepairRecord(Asset asset, Ticket ticket, String action, BigDecimal cost) {
         if (action != null && !action.isEmpty()) {
             RepairRecord record = new RepairRecord();
@@ -172,7 +199,7 @@ public class TicketController {
             record.setTicket(ticket);
             record.setActionTaken(action);
             record.setRepairDate(LocalDate.now());
-            record.setCost(cost); // ✅ Save the cost to DB
+            record.setCost(cost);
             repairRecordRepository.save(record);
         }
     }

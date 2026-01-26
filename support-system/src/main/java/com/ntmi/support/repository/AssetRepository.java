@@ -4,6 +4,8 @@ import com.ntmi.support.model.Asset;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @Repository
@@ -29,4 +31,9 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
     List<Object[]> getReliabilityStatsRaw();
     
     boolean existsByAssetCode(String assetCode);
-}
+
+
+
+long countByBranch_BranchId(Long branchId);
+List<Asset> findByWarrantyExpiryBefore(LocalDate date);
+List<Asset> findByBranch_BranchIdAndWarrantyExpiryBefore(Long branchId, LocalDate date);}

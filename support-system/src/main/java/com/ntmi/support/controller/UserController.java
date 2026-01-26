@@ -1,19 +1,17 @@
 package com.ntmi.support.controller;
 
 import com.ntmi.support.model.User;
-import com.ntmi.support.repository.UserRepository; // ✅ Ensure Repository is imported
+import com.ntmi.support.repository.UserRepository;
 import com.ntmi.support.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder; // ✅ Import PasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -24,19 +22,19 @@ public class UserController {
     private UserService userService;
 
     @Autowired
-    private UserRepository userRepository; // ✅ Inject Repository
+    private UserRepository userRepository;
 
     @Autowired
-    private PasswordEncoder passwordEncoder; // ✅ Inject PasswordEncoder
+    private PasswordEncoder passwordEncoder;
 
-    // 1. Get All Users (Admin Only)
+    // 1. Get All Users
     @GetMapping
     @PreAuthorize("hasAuthority('ADMIN')")
     public List<User> getAllUsers() {
         return userService.getAllUsers();
     }
 
-    // 2. Get Single User (Accessible by ANY logged-in user)
+    // 2. Get Single User
     @GetMapping("/{id}")
     public ResponseEntity<User> getUserById(@PathVariable Long id) {
         return userService.findById(id)
@@ -44,52 +42,71 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // 3. Create User (Admin Only)
+    // 3. Create User
     @PostMapping
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<User> createUser(@RequestBody User user) {
+        user.setActive(true); // Ensure new users are active by default
         return ResponseEntity.ok(userService.createUser(user));
     }
 
-    // 4. Update User (Admin Only)
+    // 4. Update User
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
         return ResponseEntity.ok(userService.updateUser(id, user));
     }
 
-    // 5. Delete User (Admin Only)
+    // ✅ 5. UPDATED: Soft Delete (Deactivate) instead of Delete
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<?> deleteUser(@PathVariable Long id) {
-        userService.deleteUser(id);
-        return ResponseEntity.ok().body("{\"message\": \"User deleted successfully\"}");
+    public ResponseEntity<?> deactivateUser(@PathVariable Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // If already inactive, maybe we want to reactivate? (Optional toggle logic)
+        // For now, let's just force deactivate.
+        if (!user.isActive()) {
+            return ResponseEntity.badRequest().body("User is already inactive.");
+        }
+
+        user.setActive(false); // Mark as inactive
+        userRepository.save(user);
+
+        return ResponseEntity.ok().body("{\"message\": \"User deactivated successfully. Access revoked.\"}");
+    }
+    
+    // ✅ 6. Reactivate User (Optional Helper Endpoint)
+    @PutMapping("/{id}/activate")
+    @PreAuthorize("hasAuthority('ADMIN')")
+    public ResponseEntity<?> activateUser(@PathVariable Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        user.setActive(true);
+        userRepository.save(user);
+        return ResponseEntity.ok().body("{\"message\": \"User account reactivated.\"}");
     }
 
-    // ✅ 6. FIXED: Change Password (Self Service)
-    // No ID in URL - Uses the logged-in user's Token
+    // 7. Change Password
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody Map<String, String> payload, Authentication auth) {
         try {
-            // 1. Identify the user from the Auth Token
             String username = auth.getName();
             User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new RuntimeException("User context not found. Please relogin."));
+                    .orElseThrow(() -> new RuntimeException("User context not found."));
 
             String currentPassword = payload.get("currentPassword");
             String newPassword = payload.get("newPassword");
 
-            // 2. Validate Inputs
             if (currentPassword == null || newPassword == null) {
-                return ResponseEntity.badRequest().body("Both current and new passwords are required.");
+                return ResponseEntity.badRequest().body("Both passwords required.");
             }
 
-            // 3. Check if Old Password matches
             if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
                 return ResponseEntity.badRequest().body("Incorrect current password.");
             }
 
-            // 4. Update and Save
             user.setPassword(passwordEncoder.encode(newPassword));
             userRepository.save(user);
 

@@ -3,6 +3,8 @@ package com.ntmi.support.repository;
 import com.ntmi.support.model.RepairRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -24,4 +26,7 @@ public interface RepairRecordRepository extends JpaRepository<RepairRecord, Long
         ORDER BY month DESC
     """, nativeQuery = true)
     List<Map<String, Object>> findMonthlyCostsByBranch();
+List<RepairRecord> findByRepairDateAfter(LocalDate date);
+List<RepairRecord> findByAsset_Branch_BranchIdAndRepairDateAfter(Long branchId, LocalDate date);
+
 }
