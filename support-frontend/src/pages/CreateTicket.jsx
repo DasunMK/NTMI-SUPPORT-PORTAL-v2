@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Container, Paper, Typography, TextField, Button, MenuItem, 
     Box, FormControl, InputLabel, Select, Fade, CircularProgress,
-    Stack, Avatar, InputAdornment, FormHelperText, Card, CardContent, Chip, Divider, useTheme
+    Stack, Avatar, InputAdornment, FormHelperText, Card, CardContent, Chip, Divider, Tooltip
 } from '@mui/material';
 import { 
     Send, CloudUpload, SupportAgent, NoteAdd, Computer, Devices, 
-    PriorityHigh, Close, Domain, Category, Description
+    PriorityHigh, Close, Domain, Category, Description, AutoAwesome
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
@@ -15,12 +15,13 @@ import api from '../services/api';
 const CreateTicket = () => {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
-    const theme = useTheme();
 
     const [description, setDescription] = useState('');
     const [priority, setPriority] = useState('MEDIUM'); 
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedType, setSelectedType] = useState('');
+    const [selectedCategoryName, setSelectedCategoryName] = useState(''); 
+    const [selectedTypeName, setSelectedTypeName] = useState('');       
     
     const [branchAssets, setBranchAssets] = useState([]); 
     const [selectedAssetId, setSelectedAssetId] = useState(''); 
@@ -31,11 +32,12 @@ const CreateTicket = () => {
     const [previews, setPreviews] = useState([]); 
     const [categories, setCategories] = useState([]);
     const [errorTypes, setErrorTypes] = useState([]);
+    
     const [loading, setLoading] = useState(false);
+    const [generatingAI, setGeneratingAI] = useState(false); 
     
     const branchName = localStorage.getItem('branchName') || "My Branch";
     const branchId = localStorage.getItem('branchId'); 
-
 
     useEffect(() => {
         const loadData = async () => {
@@ -57,10 +59,20 @@ const CreateTicket = () => {
     const handleCategoryChange = async (categoryId) => {
         setSelectedCategory(categoryId);
         setSelectedType(''); 
+        
+        const cat = categories.find(c => c.categoryId === categoryId);
+        setSelectedCategoryName(cat ? cat.categoryName : '');
+
         try {
             const response = await api.get(`/master-data/types/by-category/${categoryId}`);
             setErrorTypes(response.data);
         } catch (error) { console.error("Error loading types", error); }
+    };
+
+    const handleTypeChange = (typeId) => {
+        setSelectedType(typeId);
+        const type = errorTypes.find(t => t.typeId === typeId);
+        setSelectedTypeName(type ? type.typeName : '');
     };
 
     const handleAssetChange = (assetId) => {
@@ -73,6 +85,46 @@ const CreateTicket = () => {
         }
     };
 
+    // ✅ UPDATED: AI Logic now uses Asset Details
+    const generateDescription = async () => {
+        if (!selectedCategory || !selectedType) {
+            toast.warning("Please select a Category and Issue Type first.");
+            return;
+        }
+
+        setGeneratingAI(true);
+
+        setTimeout(() => {
+            // 1. Construct Asset String
+            let assetContext = "the branch system";
+            let serialInfo = "";
+            
+            if (selectedAssetDetails) {
+                assetContext = `${selectedAssetDetails.brand} ${selectedAssetDetails.model} (${selectedAssetDetails.assetCode})`;
+                if (selectedAssetDetails.serialNumber) {
+                    serialInfo = `\nDevice Serial: ${selectedAssetDetails.serialNumber}`;
+                }
+            }
+
+            // 2. Build Templates
+            const templates = [
+                // Template A: Standard (Low/Medium)
+                `Issue: ${selectedTypeName}\nCategory: ${selectedCategoryName}\n\nI am reporting a ${priority.toLowerCase()} issue with ${assetContext}.${serialInfo}\n\nThe device is not functioning as expected. We have attempted to restart it, but the issue persists.\n\nImpact: Slowing down counter operations.\nPlease investigate.`,
+                
+                // Template B: Critical/High
+                `URGENT: ${selectedTypeName} Failure\n\nCritical failure detected on ${assetContext}.${serialInfo}\n\nObservations:\n- System is completely unresponsive.\n- Error appeared during routine operation.\n- No physical damage visible.\n\nThis is blocking branch operations. Requesting immediate hardware support.`
+            ];
+
+            // 3. Select based on Priority
+            const suggestion = priority === 'CRITICAL' || priority === 'HIGH' ? templates[1] : templates[0];
+            
+            setDescription(suggestion);
+            setGeneratingAI(false);
+            toast.info("Description generated based on device details!");
+        }, 1500); 
+    };
+
+    // ... (File handling logic remains the same)
     const processFiles = (files) => {
         const fileArray = Array.from(files);
         if (images.length + fileArray.length > 5) { toast.warning("Maximum 5 images allowed."); return; }
@@ -143,9 +195,7 @@ const CreateTicket = () => {
                         boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.4)'
                     }}
                 >
-                   
                     <Box sx={{ position: 'absolute', top: -60, right: -60, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
-                    
                     <Box display="flex" alignItems="center" gap={3} position="relative" zIndex={1}>
                         <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.15)', width: 64, height: 64, backdropFilter: 'blur(10px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                             <SupportAgent fontSize="large" />
@@ -165,13 +215,10 @@ const CreateTicket = () => {
                     <form onSubmit={handleSubmit}>
                         <Stack spacing={4}>
 
-                            
                             <Box>
                                 <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
                                     1. Issue Classification
                                 </Typography>
-                                
-                            
                                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                                     <FormControl fullWidth required sx={{ flex: 1 }}>
                                         <InputLabel id="cat-label">Category</InputLabel>
@@ -189,7 +236,8 @@ const CreateTicket = () => {
                                         <InputLabel id="type-label">Issue Type</InputLabel>
                                         <Select 
                                             labelId="type-label"
-                                            value={selectedType} label="Issue Type" onChange={(e) => setSelectedType(e.target.value)}
+                                            value={selectedType} label="Issue Type" 
+                                            onChange={(e) => handleTypeChange(e.target.value)}
                                             startAdornment={<InputAdornment position="start"><NoteAdd fontSize="small" color="action" /></InputAdornment>}
                                         >
                                             {errorTypes.map((type) => <MenuItem key={type.typeId} value={type.typeId}>{type.typeName}</MenuItem>)}
@@ -228,16 +276,10 @@ const CreateTicket = () => {
                                         <Card variant="outlined" sx={{ mt: 2, borderRadius: 3, bgcolor: '#f0f9ff', borderColor: '#bae6fd', position: 'relative', overflow: 'visible' }}>
                                             <CardContent sx={{ pb: 2 }}>
                                                 <Box display="flex" alignItems="center" gap={2}>
-                                                    <Avatar variant="rounded" sx={{ bgcolor: 'white', color: '#0ea5e9', border: '1px solid #bae6fd' }}>
-                                                        <Devices />
-                                                    </Avatar>
+                                                    <Avatar variant="rounded" sx={{ bgcolor: 'white', color: '#0ea5e9', border: '1px solid #bae6fd' }}><Devices /></Avatar>
                                                     <Box>
-                                                        <Typography variant="subtitle2" fontWeight="bold" color="#0c4a6e">
-                                                            {selectedAssetDetails.brand} {selectedAssetDetails.model}
-                                                        </Typography>
-                                                        <Typography variant="caption" color="#0369a1" fontWeight="bold" sx={{ letterSpacing: 0.5 }}>
-                                                            {selectedAssetDetails.assetCode}
-                                                        </Typography>
+                                                        <Typography variant="subtitle2" fontWeight="bold" color="#0c4a6e">{selectedAssetDetails.brand} {selectedAssetDetails.model}</Typography>
+                                                        <Typography variant="caption" color="#0369a1" fontWeight="bold" sx={{ letterSpacing: 0.5 }}>{selectedAssetDetails.assetCode}</Typography>
                                                     </Box>
                                                 </Box>
                                                 <Divider sx={{ my: 1.5, borderColor: 'rgba(14, 165, 233, 0.2)' }} />
@@ -255,9 +297,13 @@ const CreateTicket = () => {
                             <Divider sx={{ borderStyle: 'dashed' }} />
                             
                             <Box>
-                                <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
-                                    3. Incident Details
-                                </Typography>
+                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                                    <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
+                                        3. Incident Details
+                                    </Typography>
+                                    
+                                    
+                                </Box>
                                 
                                 <Stack spacing={3}>
                                     <FormControl fullWidth required>
@@ -273,22 +319,32 @@ const CreateTicket = () => {
                                             <MenuItem value="CRITICAL"><Chip label="CRITICAL" size="small" sx={{ bgcolor: '#fee2e2', color: '#991b1b', fontWeight: 'bold', mr: 1 }}/> System Down</MenuItem>
                                         </Select>
                                     </FormControl>
-
+                                        
                                     <TextField 
                                         label="Detailed Description" 
                                         multiline rows={5} 
                                         fullWidth required
                                         value={description} 
                                         onChange={(e) => setDescription(e.target.value)} 
-                                        placeholder="What happened? Are there error messages? What were you doing?" 
+                                        placeholder="Click 'Auto-Fill with AI' or type your issue here..." 
                                         InputProps={{ startAdornment: <InputAdornment position="start" sx={{ alignSelf: 'flex-start', mt: 1 }}><Description color="action" fontSize="small" /></InputAdornment> }}
                                     />
                                 </Stack>
+                                <Button 
+                                        size="small" 
+                                        variant="outlined" 
+                                        color="secondary"
+                                        startIcon={generatingAI ? <CircularProgress size={16} /> : <AutoAwesome />}
+                                        onClick={generateDescription}
+                                        disabled={generatingAI}
+                                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 'bold', fontSize: '0.8rem',  mt:3 }}
+                                    >
+                                        {generatingAI ? "Generating..." : "Auto-Fill with AI"}
+                                    </Button>
                             </Box>
 
                             <Divider sx={{ borderStyle: 'dashed' }} />
 
-                           
                             <Box>
                                 <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
                                     4. Evidence (Optional)
@@ -314,27 +370,26 @@ const CreateTicket = () => {
 
                                 {previews.length > 0 && (
                                     <Box mt={2} sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 1 }}>
-                                        {previews.map((src, i) => (
-                                            <Box key={i} sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0, border: '1px solid #e2e8f0' }}>
-                                                <img src={src} alt="prev" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                <Box 
-                                                    onClick={() => removeImage(i)}
-                                                    sx={{ 
-                                                        position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.4)', 
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                                                        opacity: 0, transition: 'opacity 0.2s', cursor: 'pointer',
-                                                        '&:hover': { opacity: 1 } 
-                                                    }}
-                                                >
-                                                    <Close sx={{ color: 'white', fontSize: 24 }} />
+                                            {previews.map((src, i) => (
+                                                <Box key={i} sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0, border: '1px solid #e2e8f0' }}>
+                                                    <img src={src} alt="prev" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    <Box 
+                                                        onClick={() => removeImage(i)}
+                                                        sx={{ 
+                                                            position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.4)', 
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                            opacity: 0, transition: 'opacity 0.2s', cursor: 'pointer',
+                                                            '&:hover': { opacity: 1 } 
+                                                        }}
+                                                    >
+                                                        <Close sx={{ color: 'white', fontSize: 24 }} />
+                                                    </Box>
                                                 </Box>
-                                            </Box>
-                                        ))}
+                                            ))}
                                     </Box>
                                 )}
                             </Box>
 
-                           
                             <Button 
                                 type="submit" 
                                 variant="contained" 
