@@ -4,12 +4,13 @@ import {
     TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle, 
     DialogContent, DialogActions, TextField, MenuItem, Box, Chip, Stack, 
     Select, ToggleButton, ToggleButtonGroup, 
-    InputAdornment, Avatar, Grid, LinearProgress
+    InputAdornment, Avatar, Grid, LinearProgress, Divider
 } from '@mui/material';
 
 import { 
-    Add, Edit, Delete, CheckCircle, Build, DeleteForever, 
-    Search, Download, Inventory, History, Close, Computer, EventBusy, Payments
+    Add, Edit, CheckCircle, Build, DeleteForever, 
+    Search, Download, Inventory, History, Close, Computer, EventBusy, Payments, ConfirmationNumber,
+    CalendarMonth, Business
 } from '@mui/icons-material';
 
 import jsPDF from 'jspdf';
@@ -26,7 +27,16 @@ const getWarrantyDaysLeft = (expiryDate) => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-// Stat Card Component
+// Helper: Status Color Logic
+const getStatusColor = (status) => {
+    switch (status) {
+        case 'ACTIVE': return 'success';   // Green
+        case 'REPAIR': return 'warning';   // Orange
+        case 'DISPOSED': return 'error';   // Red
+        default: return 'default';
+    }
+};
+
 const StatCard = ({ title, count, icon, color }) => (
     <Paper 
         elevation={0} 
@@ -51,7 +61,6 @@ const StatCard = ({ title, count, icon, color }) => (
 );
 
 const AssetManagement = () => {
-    // --- State ---
     const [assets, setAssets] = useState([]);
     const [branches, setBranches] = useState([]); 
     const [brands, setBrands] = useState([]); 
@@ -66,11 +75,8 @@ const AssetManagement = () => {
     const [repairHistory, setRepairHistory] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
-    // --- Role & Identity ---
     const userRole = localStorage.getItem('role'); 
     const myBranchId = localStorage.getItem('branchId');
-    
-    // ✅ FIX: Initialize state safely based on role
     const [selectedBranchId, setSelectedBranchId] = useState(userRole === 'ADMIN' ? 'ALL' : (myBranchId || ''));
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -87,11 +93,8 @@ const AssetManagement = () => {
         if(userRole === 'ADMIN') loadBranches();
     }, []);
 
-    // ✅ FIX: Fetch assets ONLY when ID is valid
     useEffect(() => {
-        if (selectedBranchId) {
-            fetchAssets(selectedBranchId);
-        }
+        if (selectedBranchId) { fetchAssets(selectedBranchId); }
     }, [selectedBranchId]);
 
     const loadMasterData = async () => {
@@ -109,32 +112,19 @@ const AssetManagement = () => {
 
     const loadBranches = async () => {
         try {
-            const res = await api.get('/master-data/branches'); // Verify this endpoint matches your backend
+            const res = await api.get('/master-data/branches');
             setBranches(res.data);
-        } catch (error) {
-            console.error("Failed to load branches", error);
-        }
+        } catch (error) { console.error(error); }
     };
 
-    // ✅ FIX: Improved Fetch Logic to handle 'ALL' correctly
     const fetchAssets = async (branchId) => {
         try {
-            let url;
-            if (branchId === 'ALL') {
-                url = '/assets'; // Admin sees all
-            } else {
-                url = `/assets/branch/${branchId}`; // Specific branch
-            }
-            
+            let url = branchId === 'ALL' ? '/assets' : `/assets/branch/${branchId}`;
             const res = await api.get(url);
             setAssets(res.data);
-        } catch (error) { 
-            console.error("Error fetching assets:", error);
-            // Optional: toast.error("Failed to load assets."); 
-        }
+        } catch (error) { console.error(error); }
     };
 
-    // --- History Logic ---
     const handleViewHistory = async (asset) => {
         setCurrentAsset(asset);
         setHistoryOpen(true);
@@ -155,14 +145,6 @@ const AssetManagement = () => {
         return repairHistory.reduce((sum, record) => sum + (record.cost || 0), 0);
     };
 
-    // --- Filter Logic ---
-    const getFilteredModels = () => {
-        const bId = brands.find(b => b.name === formData.brand)?.id;
-        const tId = deviceTypes.find(t => t.name === formData.deviceType)?.id;
-        // Simple client-side filter if models have brandId linked
-        return models; 
-    };
-
     const filteredAssets = assets.filter(asset => {
         const lowerQ = searchQuery.toLowerCase();
         const matchesSearch = asset.assetCode.toLowerCase().includes(lowerQ) || 
@@ -180,7 +162,6 @@ const AssetManagement = () => {
         disposed: assets.filter(a => a.status === 'DISPOSED').length
     };
 
-    // --- PDF Generator ---
     const generatePDF = () => {
         const doc = new jsPDF();
         doc.setFillColor(30, 41, 59); 
@@ -188,13 +169,9 @@ const AssetManagement = () => {
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(16);
         doc.text("NTMI Asset Inventory Report", 14, 15);
-        
         doc.setTextColor(50, 50, 50);
         doc.setFontSize(10);
-        const dateStr = new Date().toLocaleDateString();
-        const filterStr = `Filter: ${filterStatus} | Search: "${searchQuery}" | Total: ${filteredAssets.length}`;
-        doc.text(`Generated: ${dateStr}`, 14, 32);
-        doc.text(filterStr, 14, 38);
+        doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 32);
 
         const tableColumn = ["Asset Code", "Branch", "Device", "Serial No", "Status", "Warranty Exp"];
         const tableRows = filteredAssets.map(asset => [
@@ -219,14 +196,14 @@ const AssetManagement = () => {
         toast.success("PDF Downloaded Successfully");
     };
 
-    // --- Dialog Handlers ---
     const handleOpen = (asset = null) => {
         if (asset) {
             setFormData({
                 assetCode: asset.assetCode, brand: asset.brand, deviceType: asset.deviceType || '', 
                 model: asset.model, serialNumber: asset.serialNumber, status: asset.status,
                 branchId: asset.branch?.branchId || (selectedBranchId === 'ALL' ? (branches[0]?.branchId || '') : selectedBranchId),
-                purchasedDate: asset.purchasedDate || '', warrantyExpiry: asset.warrantyExpiry || ''
+                purchasedDate: asset.purchasedDate ? asset.purchasedDate.split('T')[0] : '', // Handle Date format
+                warrantyExpiry: asset.warrantyExpiry ? asset.warrantyExpiry.split('T')[0] : ''
             });
             setCurrentAsset(asset);
         } else {
@@ -242,24 +219,14 @@ const AssetManagement = () => {
     };
 
     const handleSave = async () => {
-        const payload = { ...formData, branchId: undefined }; // Don't send branchId in body if using param, or align with backend
+        const payload = { ...formData, branchId: undefined };
         try {
-            if (currentAsset) {
-                await api.put(`/assets/${currentAsset.assetId}`, payload);
-            } else {
-                // Ensure branchId is passed correctly based on your backend expectation
-                await api.post(`/assets?branchId=${formData.branchId}`, payload);
-            }
+            if (currentAsset) await api.put(`/assets/${currentAsset.assetId}`, payload);
+            else await api.post(`/assets?branchId=${formData.branchId}`, payload);
             toast.success("Asset Saved");
             setOpen(false); 
             fetchAssets(selectedBranchId);
         } catch (error) { toast.error("Operation Failed"); }
-    };
-
-    const handleDelete = async (id) => {
-        if(!window.confirm("Delete permanently?")) return;
-        try { await api.delete(`/assets/${id}`); toast.success("Deleted"); fetchAssets(selectedBranchId); } 
-        catch (error) { toast.error("Failed"); }
     };
 
     return (
@@ -273,7 +240,6 @@ const AssetManagement = () => {
                         <Avatar sx={{ width: 64, height: 64, bgcolor: 'rgba(255,255,255,0.15)' }}><Inventory /></Avatar>
                         <Box>
                             <Typography variant="h4" fontWeight="800">Asset Management</Typography>
-                            {/* Branch Selector for Admin */}
                             {userRole === 'ADMIN' && (
                                 <Select 
                                     size="small" value={selectedBranchId} 
@@ -288,17 +254,8 @@ const AssetManagement = () => {
                         </Box>
                     </Box>
                     <Stack direction="row" spacing={2}>
-                        <Button 
-                            variant="outlined" 
-                            startIcon={<Download />} 
-                            onClick={generatePDF} 
-                            sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
-                        >
-                            Export PDF
-                        </Button>
-                        <Button variant="contained" startIcon={<Add />} onClick={() => handleOpen()} sx={{ bgcolor: 'white', color: '#0f172a', fontWeight: 'bold', '&:hover': { bgcolor: '#f1f5f9' } }}>
-                            Register Asset
-                        </Button>
+                        <Button variant="outlined" startIcon={<Download />} onClick={generatePDF} sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>Export PDF</Button>
+                        <Button variant="contained" startIcon={<Add />} onClick={() => handleOpen()} sx={{ bgcolor: 'white', color: '#0f172a', fontWeight: 'bold', '&:hover': { bgcolor: '#f1f5f9' } }}>Register Asset</Button>
                     </Stack>
                 </Stack>
             </Paper>
@@ -314,7 +271,7 @@ const AssetManagement = () => {
             {/* FILTERS */}
             <Paper sx={{ p: 2, mb: 4, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center' }} elevation={0} variant="outlined">
                 <TextField 
-                    size="small" placeholder="Quick search asset code, brand, serial..." fullWidth
+                    size="small" placeholder="Quick search by Code, Serial, Model..." fullWidth
                     value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} 
                     InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action" /></InputAdornment> }} 
                 />
@@ -327,74 +284,111 @@ const AssetManagement = () => {
             </Paper>
 
             {/* ASSET TABLE */}
-            <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 4, border: '1px solid #e2e8f0' }}>
-                <Table>
-                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
+            <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 4, border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 800 }}>
+                    <TableHead sx={{ bgcolor: '#f1f5f9' }}>
                         <TableRow>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>ASSET Reg No. & TYPE</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>BRANCH</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>DEVICE DETAILS</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>WARRANTY DAYS LEFT</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }} align="center">REPAIRS COUNT</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>STATUS</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: '800', color: '#475569' }}>ACTIONS</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569', py: 2 }}>ASSET Reg No. & TYPE</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569', py: 2 }}>BRANCH</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569', py: 2 }}>DEVICE DETAILS</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569', py: 2 }}>WARRANTY</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569', py: 2 }} align="center">REPAIRS</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569', py: 2 }}>STATUS</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: '800', color: '#475569', py: 2 }}>ACTIONS</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {filteredAssets.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={7} align="center" sx={{ py: 5, color: 'text.secondary' }}>
-                                    No assets found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            filteredAssets.map((asset) => {
-                                const daysLeft = getWarrantyDaysLeft(asset.warrantyExpiry);
-                                return (
-                                    <TableRow key={asset.assetId} hover sx={{ cursor: 'pointer' }} onClick={() => handleViewDetails(asset)}>
-                                        <TableCell>
-                                            <Typography variant="body2" fontWeight="800" color="primary.main">{asset.assetCode}</Typography>
-                                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>{asset.deviceType}</Typography>
-                                        </TableCell>
-                                        <TableCell><Chip label={asset.branch?.branchCode || 'N/A'} size="small" variant="outlined" /></TableCell>
-                                        <TableCell>
-                                            <Typography variant="body2" fontWeight="700">{asset.brand}</Typography>
-                                            <Typography variant="caption" color="textSecondary">{asset.model}</Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            {daysLeft !== null ? (
-                                                <Chip 
-                                                    size="small" 
-                                                    icon={<EventBusy sx={{ fontSize: '14px !important' }} />}
-                                                    label={daysLeft > 0 ? `${daysLeft} Days` : 'Expired'} 
-                                                    color={daysLeft < 30 ? "error" : "default"}
-                                                    sx={{ fontWeight: 'bold' }}
-                                                />
-                                            ) : "-"}
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: asset.repairCount > 2 ? '#fee2e2' : '#f1f5f9', color: asset.repairCount > 2 ? '#b91c1c' : '#475569', border: '1px solid #e2e8f0', margin: 'auto' }}>
-                                                {asset.repairCount || 0}
+                        {filteredAssets.map((asset) => {
+                            const daysLeft = getWarrantyDaysLeft(asset.warrantyExpiry);
+                            const statusColor = getStatusColor(asset.status);
+
+                            return (
+                                <TableRow key={asset.assetId} hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#f8fafc' } }} onClick={() => handleViewDetails(asset)}>
+                                    {/* 1. ASSET Reg No & Type */}
+                                    <TableCell>
+                                        <Box display="flex" alignItems="center" gap={1.5}>
+                                            <Avatar sx={{ width: 32, height: 32, bgcolor: '#e0f2fe', color: '#0284c7' }} variant="rounded">
+                                                <Computer fontSize="small" />
                                             </Avatar>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip label={asset.status} color={asset.status === 'ACTIVE' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 800, fontSize: '0.65rem' }} />
-                                        </TableCell>
-                                        <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                <IconButton size="small" onClick={() => handleViewHistory(asset)} sx={{ color: '#6366f1' }}><History fontSize="small" /></IconButton>
-                                                {userRole === 'ADMIN' && (
-                                                    <>
-                                                        <IconButton size="small" onClick={() => handleOpen(asset)} sx={{ color: '#0ea5e9' }}><Edit fontSize="small"/></IconButton>
-                                                        <IconButton size="small" onClick={() => handleDelete(asset.assetId)} sx={{ color: '#ef4444' }}><Delete fontSize="small"/></IconButton>
-                                                    </>
-                                                )}
-                                            </Stack>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })
-                        )}
+                                            <Box>
+                                                <Typography variant="body2" fontWeight="800" color="primary.main">{asset.assetCode}</Typography>
+                                                <Typography variant="caption" color="textSecondary" fontWeight="600">{asset.deviceType}</Typography>
+                                            </Box>
+                                        </Box>
+                                    </TableCell>
+
+                                    {/* 2. Branch Name (not Code) */}
+                                    <TableCell>
+                                        <Stack direction="row" alignItems="center" gap={1}>
+                                            <Business sx={{ fontSize: 16, color: '#94a3b8' }} />
+                                            <Typography variant="body2" fontWeight="600" color="#334155">
+                                                {asset.branch?.branchName || 'Unassigned'}
+                                            </Typography>
+                                        </Stack>
+                                    </TableCell>
+
+                                    {/* 3. Device Details */}
+                                    <TableCell>
+                                        <Typography variant="body2" fontWeight="700" color="#1e293b">{asset.brand} {asset.model}</Typography>
+                                        <Typography variant="caption" color="textSecondary" sx={{ fontFamily: 'monospace', bgcolor: '#f1f5f9', px: 0.5, borderRadius: 0.5 }}>
+                                            SN: {asset.serialNumber}
+                                        </Typography>
+                                    </TableCell>
+
+                                    {/* 4. Warranty */}
+                                    <TableCell>
+                                        {daysLeft !== null ? (
+                                            <Chip 
+                                                size="small" 
+                                                icon={<EventBusy sx={{ fontSize: '14px !important' }} />} 
+                                                label={daysLeft > 0 ? `${daysLeft} Days Left` : 'Expired'} 
+                                                color={daysLeft < 30 ? "error" : "default"} 
+                                                variant={daysLeft > 0 ? "outlined" : "filled"}
+                                                sx={{ fontWeight: 'bold' }} 
+                                            />
+                                        ) : "-"}
+                                    </TableCell>
+
+                                    {/* 5. Repairs */}
+                                    <TableCell align="center">
+                                        <Chip 
+                                            label={asset.repairCount || 0} 
+                                            size="small" 
+                                            sx={{ 
+                                                fontWeight: 'bold', 
+                                                bgcolor: asset.repairCount > 0 ? '#fff7ed' : '#f8fafc',
+                                                color: asset.repairCount > 0 ? '#c2410c' : '#94a3b8',
+                                                minWidth: 30
+                                            }} 
+                                        />
+                                    </TableCell>
+
+                                    {/* 6. Status (Color Coded) */}
+                                    <TableCell>
+                                        <Chip 
+                                            label={asset.status} 
+                                            color={statusColor} 
+                                            size="small" 
+                                            sx={{ fontWeight: 800, fontSize: '0.65rem', minWidth: 70 }} 
+                                        />
+                                    </TableCell>
+
+                                    {/* 7. Actions */}
+                                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                            <IconButton size="small" onClick={() => handleViewHistory(asset)} sx={{ color: '#6366f1', bgcolor: '#eef2ff', '&:hover': { bgcolor: '#e0e7ff' } }}>
+                                                <History fontSize="small" />
+                                            </IconButton>
+                                            {userRole === 'ADMIN' && (
+                                                <IconButton size="small" onClick={() => handleOpen(asset)} sx={{ color: '#0ea5e9', bgcolor: '#e0f2fe', '&:hover': { bgcolor: '#bae6fd' } }}>
+                                                    <Edit fontSize="small"/>
+                                                </IconButton>
+                                            )}
+                                        </Stack>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
                     </TableBody>
                 </Table>
             </TableContainer>
@@ -425,13 +419,7 @@ const AssetManagement = () => {
                     )}
                 </DialogContent>
                 <DialogActions sx={{ p: 3, borderTop: '1px solid #eee' }}>
-                    <Button 
-                        variant="outlined" color="primary" startIcon={<History />} 
-                        onClick={() => { setDetailsOpen(false); handleViewHistory(currentAsset); }} 
-                        sx={{ fontWeight: 'bold', borderWidth: 2 }}
-                    >
-                        Maintenance History
-                    </Button>
+                    <Button variant="outlined" color="primary" startIcon={<History />} onClick={() => { setDetailsOpen(false); handleViewHistory(currentAsset); }} sx={{ fontWeight: 'bold', borderWidth: 2 }}>Maintenance History</Button>
                     <Box sx={{ flexGrow: 1 }} />
                     <Button onClick={() => setDetailsOpen(false)}>Close</Button>
                     {userRole === 'ADMIN' && <Button variant="contained" startIcon={<Edit />} onClick={() => { setDetailsOpen(false); handleOpen(currentAsset); }}>Edit</Button>}
@@ -457,12 +445,33 @@ const AssetManagement = () => {
                             <TextField select label="Model" sx={{ flex: 1 }} value={formData.model} onChange={(e) => setFormData({...formData, model: e.target.value})}>{models.map(m => <MenuItem key={m.id} value={m.name}>{m.name}</MenuItem>)}</TextField>
                             <TextField label="Serial No" sx={{ flex: 1 }} value={formData.serialNumber} onChange={(e) => setFormData({...formData, serialNumber: e.target.value})} />
                         </Box>
+                        
+                        {/* ✅ ADDED: Purchase Date Field */}
                         <Box sx={{ display: 'flex', gap: 2 }}>
-                            <TextField label="Warranty Exp" type="date" sx={{ flex: 1 }} InputLabelProps={{ shrink: true }} value={formData.warrantyExpiry} onChange={(e) => setFormData({...formData, warrantyExpiry: e.target.value})} />
-                            <ToggleButtonGroup value={formData.status} exclusive onChange={(e, s) => s && setFormData({...formData, status: s})} sx={{ flex: 1 }} color="primary" size="small">
-                                <ToggleButton value="ACTIVE">ACTIVE</ToggleButton>
-                                <ToggleButton value="REPAIR">REPAIR</ToggleButton>
-                                <ToggleButton value="DISPOSED">DISPOSED</ToggleButton>
+                            <TextField 
+                                label="Purchase Date" 
+                                type="date" 
+                                sx={{ flex: 1 }} 
+                                InputLabelProps={{ shrink: true }} 
+                                value={formData.purchasedDate} 
+                                onChange={(e) => setFormData({...formData, purchasedDate: e.target.value})} 
+                            />
+                            <TextField 
+                                label="Warranty Exp" 
+                                type="date" 
+                                sx={{ flex: 1 }} 
+                                InputLabelProps={{ shrink: true }} 
+                                value={formData.warrantyExpiry} 
+                                onChange={(e) => setFormData({...formData, warrantyExpiry: e.target.value})} 
+                            />
+                        </Box>
+
+                        <Box>
+                            <Typography variant="caption" color="textSecondary" sx={{ mb: 1, display: 'block' }}>Current Status</Typography>
+                            <ToggleButtonGroup value={formData.status} exclusive onChange={(e, s) => s && setFormData({...formData, status: s})} fullWidth color="primary" size="small">
+                                <ToggleButton value="ACTIVE" sx={{ color: 'green', '&.Mui-selected': { bgcolor: '#dcfce7', color: 'green' } }}>ACTIVE</ToggleButton>
+                                <ToggleButton value="REPAIR" sx={{ color: 'orange', '&.Mui-selected': { bgcolor: '#ffedd5', color: 'orange' } }}>REPAIR</ToggleButton>
+                                <ToggleButton value="DISPOSED" sx={{ color: 'red', '&.Mui-selected': { bgcolor: '#fee2e2', color: 'red' } }}>DISPOSED</ToggleButton>
                             </ToggleButtonGroup>
                         </Box>
                     </Stack>
@@ -488,12 +497,19 @@ const AssetManagement = () => {
                             <Stack spacing={2}>
                                 {repairHistory.map((record) => (
                                     <Paper key={record.id} elevation={0} sx={{ p: 2, border: '1px solid #e2e8f0', borderLeft: '6px solid #3b82f6', bgcolor: 'white' }}>
-                                        <Box display="flex" justifyContent="space-between">
-                                            <Typography variant="body2" fontWeight="800">{record.actionTaken}</Typography>
-                                            <Box textAlign="right">
-                                                <Typography variant="caption" fontWeight="bold" color="textSecondary" display="block">{record.repairDate}</Typography>
-                                                {record.cost > 0 && <Chip label={`Rs. ${record.cost.toLocaleString()}`} size="small" sx={{ height: 20, bgcolor: '#f1f5f9', mt: 0.5, fontWeight: 'bold' }} />}
-                                            </Box>
+                                        <Box display="flex" justifyContent="space-between" mb={1}>
+                                            <Chip 
+                                                icon={<ConfirmationNumber sx={{ fontSize: '14px !important' }} />} 
+                                                label={`Ticket #${record.ticket?.ticketId || record.ticketId || 'N/A'}`} 
+                                                size="small" 
+                                                sx={{ fontWeight: 'bold', bgcolor: '#e0f2fe', color: '#0369a1' }} 
+                                            />
+                                            <Typography variant="caption" fontWeight="bold" color="textSecondary">{record.repairDate}</Typography>
+                                        </Box>
+                                        <Divider sx={{ mb: 1.5, opacity: 0.5 }} />
+                                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                                            <Typography variant="body2" fontWeight="700" color="textPrimary">{record.actionTaken}</Typography>
+                                            {record.cost > 0 && <Chip label={`Rs. ${record.cost.toLocaleString()}`} size="small" color="success" variant="outlined" sx={{ fontWeight: 'bold' }} />}
                                         </Box>
                                     </Paper>
                                 ))}

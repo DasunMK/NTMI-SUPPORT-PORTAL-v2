@@ -38,6 +38,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/master-data/**").permitAll()
                 .requestMatchers("/error").permitAll()
                 .requestMatchers("/api/notifications/**").permitAll()
+                .requestMatchers("/ws/**").permitAll()
                 
                 // 2. PROFILE & SELF SERVICE (✅ FIX: Allow any logged-in user)
                 .requestMatchers(HttpMethod.GET, "/api/users/{id}").authenticated()

@@ -7,6 +7,8 @@ import com.ntmi.support.model.User;
 import com.ntmi.support.repository.UserRepository;
 import com.ntmi.support.service.CommentService;
 import com.ntmi.support.service.NotificationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -18,6 +20,8 @@ import java.util.List;
 @RequestMapping("/api/comments")
 @CrossOrigin("*")
 public class CommentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(CommentController.class);
 
     @Autowired
     private CommentService commentService;
@@ -54,6 +58,8 @@ public class CommentController {
     private void triggerCommentNotification(Comment comment, User sender) {
         try {
             Ticket ticket = comment.getTicket();
+            
+            // Create a short preview of the message (max 50 chars)
             String messagePreview = comment.getText().length() > 50 
                 ? comment.getText().substring(0, 47) + "..." 
                 : comment.getText();
@@ -62,21 +68,33 @@ public class CommentController {
             String message = sender.getFullName() + ": " + messagePreview;
 
             // Logic: Who sent it?
-            if (sender.getUserId().equals(ticket.getCreatedBy().getUserId())) {
-                // SENDER IS BRANCH USER -> Notify Admin
+            // Check if Sender is the Ticket Creator (Branch User)
+            boolean isCreator = sender.getUserId().equals(ticket.getCreatedBy().getUserId());
+
+            if (isCreator) {
+                // CASE 1: Branch User sent a message -> Notify Admin
                 if (ticket.getAssignedAdmin() != null) {
                     // Notify specific assigned admin
-                    notificationService.send(ticket.getAssignedAdmin(), title, message, "INFO");
+                    notificationService.sendPrivateNotification(
+                        ticket.getAssignedAdmin().getUsername(), 
+                        title, 
+                        message
+                    );
                 } else {
                     // Ticket not assigned yet? Notify ALL admins
-                    notificationService.notifyAllAdmins(title, message, "INFO");
+                    notificationService.notifyAllAdmins(title, message);
                 }
             } else {
-                // SENDER IS ADMIN -> Notify Branch User (Creator)
-                notificationService.send(ticket.getCreatedBy(), title, message, "INFO");
+                // CASE 2: Admin sent a message -> Notify Branch User (Creator)
+                notificationService.sendPrivateNotification(
+                    ticket.getCreatedBy().getUsername(), 
+                    title, 
+                    message
+                );
             }
         } catch (Exception e) {
-            System.err.println("⚠️ Failed to send comment notification: " + e.getMessage());
+            // Log error but don't fail the comment request
+            logger.error("Failed to send notification for Ticket #{}", comment.getTicket().getTicketId(), e);
         }
     }
 }

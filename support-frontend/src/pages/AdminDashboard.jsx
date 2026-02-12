@@ -9,7 +9,7 @@ import {
     Search, AssignmentLate, PendingActions, TaskAlt,
     FilterList, Dashboard, AccessTime, Close,
     ReportProblem, Computer, DeleteForever, CheckCircle, Business, Person,
-    Lock, // ✅ Added Lock icon
+    Lock, 
     Download as DownloadIcon 
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -313,12 +313,16 @@ const AdminDashboard = () => {
                                     )}
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '450px' }, display: 'flex', flexDirection: 'column', bgcolor: '#f8fafc' }}>
-                                    <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}><TicketComments ticketId={selectedTicket.ticketId} /></Box>
+                                    
+                                    {/* ✅ ADDED status={selectedTicket.status} to pass the lock condition */}
+                                    <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}>
+                                        <TicketComments ticketId={selectedTicket.ticketId} status={selectedTicket.status} />
+                                    </Box>
+
                                     <Box sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: 'white' }}>
                                         {selectedTicket.status === 'OPEN' ? (
                                             <Button variant="contained" fullWidth size="large" onClick={() => handleStartTicket(selectedTicket.ticketId)} sx={{ borderRadius: 2, fontWeight: 'bold', background: 'linear-gradient(to right, #2563eb, #1d4ed8)' }}>Accept Ticket</Button>
                                         ) : selectedTicket.status === 'IN_PROGRESS' ? (
-                                            // ✅ Check if the ticket belongs to the current admin
                                             selectedTicket.assignedAdmin?.userId === myId ? (
                                                 <Stack spacing={2}>
                                                     <Button variant="contained" color="success" fullWidth size="large" onClick={() => openResolutionPrompt('RESOLVE')} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Resolve Issue</Button>

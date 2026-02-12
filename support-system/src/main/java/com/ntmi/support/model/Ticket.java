@@ -99,4 +99,7 @@ public class Ticket {
             this.createdAt = LocalDateTime.now();
         }
     }
+
+    
+    private Double repairCost;
 }

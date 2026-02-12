@@ -17,7 +17,6 @@ import api from '../services/api';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 
-
 const getWarrantyDaysLeft = (expiryDate) => {
     if (!expiryDate) return null;
     const today = new Date();
@@ -56,7 +55,6 @@ const BranchAssetManagement = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL');
     
-    const [detailsOpen, setDetailsOpen] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [currentAsset, setCurrentAsset] = useState(null);
     const [repairHistory, setRepairHistory] = useState([]);
@@ -78,9 +76,6 @@ const BranchAssetManagement = () => {
             setAssets(res.data);
         } catch (error) {
             console.error("Failed to load assets", error);
-            if (error.response && error.response.status === 403) {
-                toast.error("Access Denied: You don't have permission to view this branch.");
-            }
         }
     };
 
@@ -91,8 +86,11 @@ const BranchAssetManagement = () => {
         try {
             const res = await api.get(`/assets/${asset.assetId}/history`);
             setRepairHistory(res.data);
-        } catch (error) { setRepairHistory([]); } 
-        finally { setLoadingHistory(false); }
+        } catch (error) { 
+            setRepairHistory([]); 
+        } finally { 
+            setLoadingHistory(false); 
+        }
     };
 
     const handleReportIssue = (asset) => {
@@ -105,7 +103,6 @@ const BranchAssetManagement = () => {
         });
     };
 
-    
     const filteredAssets = assets.filter(asset => {
         const lowerQ = searchQuery.toLowerCase();
         const matchesSearch = asset.assetCode.toLowerCase().includes(lowerQ) || 
@@ -114,6 +111,9 @@ const BranchAssetManagement = () => {
         const matchesStatus = filterStatus === 'ALL' || asset.status === filterStatus;
         return matchesSearch && matchesStatus;
     });
+
+    // Calculate Grand Total for the branch
+    const branchTotalSpend = filteredAssets.reduce((sum, a) => sum + (a.totalRepairCost || 0), 0);
 
     const stats = {
         total: assets.length,
@@ -134,13 +134,15 @@ const BranchAssetManagement = () => {
         doc.setFontSize(10);
         doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 35);
 
-        const tableColumn = ["Asset Code", "Device", "Serial No", "Status", "Warranty"];
+        const tableColumn = ["Asset Code", "Device", "Serial No", "Status", "Warranty", "Repairs"];
         const tableRows = filteredAssets.map(asset => [
             asset.assetCode,
             `${asset.brand} ${asset.model}`,
             asset.serialNumber,
             asset.status,
-            asset.warrantyExpiry || "N/A"
+            asset.warrantyExpiry || "N/A",
+            asset.repairCount || 0,
+            `Rs. ${(asset.totalRepairCost || 0).toLocaleString()}`
         ]);
 
         autoTable(doc, {
@@ -149,9 +151,9 @@ const BranchAssetManagement = () => {
             startY: 40,
             theme: 'grid',
             headStyles: { fillColor: [30, 41, 59] },
-            styles: { fontSize: 9 }
+            styles: { fontSize: 8 }
         });
-        doc.save(`My_Assets.pdf`);
+        doc.save(`My_Assets_Report.pdf`);
     };
 
     return (
@@ -164,16 +166,15 @@ const BranchAssetManagement = () => {
                         <Avatar sx={{ width: 64, height: 64, bgcolor: 'rgba(255,255,255,0.15)' }}><Inventory /></Avatar>
                         <Box>
                             <Typography variant="h4" fontWeight="800">My Branch Assets</Typography>
-                            <Typography variant="body1" sx={{ opacity: 0.8 }}>Inventory for your Branch</Typography>
+                            <Typography variant="body1" sx={{ opacity: 0.8 }}>Inventory & Reliability Tracking</Typography>
                         </Box>
                     </Box>
                     <Button variant="outlined" startIcon={<Download />} onClick={generatePDF} sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)', '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                        Export List
+                        Export Report
                     </Button>
                 </Stack>
             </Paper>
 
-            
             <Grid container spacing={3} mb={5}>
                 <Grid item xs={12} sm={6} md={3}><StatCard title="Total Devices" count={stats.total} icon={<Inventory />} color="#334155" /></Grid>
                 <Grid item xs={12} sm={6} md={3}><StatCard title="Working" count={stats.active} icon={<CheckCircle />} color="#10b981" /></Grid>
@@ -183,7 +184,7 @@ const BranchAssetManagement = () => {
 
             {/* FILTERS */}
             <Paper sx={{ p: 2, mb: 4, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center' }} elevation={0} variant="outlined">
-                <TextField size="small" placeholder="Quick search asset code, brand..." fullWidth value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action" /></InputAdornment> }} />
+                <TextField size="small" placeholder="Quick search..." fullWidth value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action" /></InputAdornment> }} />
                 <TextField select size="small" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} sx={{ minWidth: 150 }}>
                     <MenuItem value="ALL">All Statuses</MenuItem>
                     <MenuItem value="ACTIVE">Active</MenuItem>
@@ -194,12 +195,13 @@ const BranchAssetManagement = () => {
 
             {/* TABLE */}
             <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 4, border: '1px solid #e2e8f0' }}>
-                <Table>
+                <Table sx={{ minWidth: 1000 }}>
                     <TableHead sx={{ bgcolor: '#f8fafc' }}>
                         <TableRow>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>ASSET Reg No.</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>DEVICE</TableCell>
-                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>WARRANTY DAYS LEFT</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>ASSET CODE</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>DEVICE DETAILS</TableCell>
+                            <TableCell sx={{ fontWeight: '800', color: '#475569' }}>WARRANTY</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: '800', color: '#475569' }}>REPAIRS</TableCell>
                             <TableCell sx={{ fontWeight: '800', color: '#475569' }}>STATUS</TableCell>
                             <TableCell align="right" sx={{ fontWeight: '800', color: '#475569' }}>ACTIONS</TableCell>
                         </TableRow>
@@ -211,18 +213,32 @@ const BranchAssetManagement = () => {
                                 <TableRow key={asset.assetId} hover>
                                     <TableCell>
                                         <Typography variant="body2" fontWeight="800" color="primary.main">{asset.assetCode}</Typography>
-                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>{asset.deviceType}</Typography>
                                     </TableCell>
                                     <TableCell>
-                                        <Typography variant="body2" fontWeight="700">{asset.brand}</Typography>
-                                        <Typography variant="caption" color="textSecondary">{asset.model}</Typography>
+                                        <Typography variant="body2" fontWeight="700">{asset.brand} {asset.model}</Typography>
+                                        <Typography variant="caption" color="textSecondary">{asset.deviceType} • S/N: {asset.serialNumber}</Typography>
                                     </TableCell>
-                                    
                                     <TableCell>
                                         {daysLeft !== null ? (
                                             <Chip size="small" icon={<EventBusy sx={{ fontSize: '14px !important' }} />} label={daysLeft > 0 ? `${daysLeft} Days` : 'Expired'} color={daysLeft < 30 ? "error" : "default"} sx={{ fontWeight: 'bold' }} />
                                         ) : "-"}
                                     </TableCell>
+                                    <TableCell align="center">
+                                        <Chip 
+                                            label={asset.repairCount || 0} 
+                                            size="small" 
+                                            sx={{ 
+                                                bgcolor: (asset.repairCount || 0) > 0 ? '#eff6ff' : '#f8fafc',
+                                                color: (asset.repairCount || 0) > 0 ? '#1d4ed8' : '#94a3b8',
+                                                fontWeight: 'bold'
+                                            }} 
+                                        />
+                                    </TableCell>
+                                    {/* <TableCell align="right">
+                                        <Typography variant="body2" fontWeight="700">
+                                            {asset.totalRepairCost ? `Rs. ${asset.totalRepairCost.toLocaleString()}` : '-'}
+                                        </Typography>
+                                    </TableCell> */}
                                     <TableCell>
                                         <Chip label={asset.status} color={asset.status === 'ACTIVE' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 800, fontSize: '0.65rem' }} />
                                     </TableCell>
@@ -237,26 +253,42 @@ const BranchAssetManagement = () => {
                                 </TableRow>
                             );
                         })}
+
+                        {/* GRAND TOTAL ROW */}
+                        {/* <TableRow sx={{ bgcolor: '#f8fafc' }}>
+                            <TableCell colSpan={4} align="right">
+                                <Typography variant="subtitle2" fontWeight="800">Branch Maintenance Total:</Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                                <Typography variant="subtitle2" fontWeight="800" color="primary.main">
+                                    Rs. {branchTotalSpend.toLocaleString()}
+                                </Typography>
+                            </TableCell>
+                            <TableCell colSpan={2} />
+                        </TableRow> */}
                     </TableBody>
                 </Table>
             </TableContainer>
 
             {/* MAINTENANCE HISTORY DIALOG */}
             <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Maintenance Log</DialogTitle>
+                <DialogTitle sx={{ fontWeight: '800' }}>Maintenance Log: {currentAsset?.assetCode}</DialogTitle>
                 <DialogContent>
-                    {loadingHistory ? <LinearProgress /> : (
+                    {loadingHistory ? <LinearProgress sx={{ mt: 2 }} /> : (
                         <Stack spacing={2} mt={2}>
-                            {repairHistory.length === 0 ? <Typography>No history found.</Typography> : repairHistory.map((rec) => (
-                                <Paper key={rec.id} sx={{ p: 2, borderLeft: '4px solid #3b82f6' }}>
-                                    <Typography variant="body2" fontWeight="bold">{rec.actionTaken}</Typography>
-                                    <Typography variant="caption">{rec.repairDate}</Typography>
+                            {repairHistory.length === 0 ? <Typography color="textSecondary">No history found.</Typography> : repairHistory.map((rec) => (
+                                <Paper key={rec.id} sx={{ p: 2, borderLeft: '4px solid #3b82f6', bgcolor: '#f8fafc' }}>
+                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                        <Typography variant="body2" fontWeight="bold">{rec.actionTaken}</Typography>
+                                        {rec.cost > 0 && <Chip label={`Rs. ${rec.cost.toLocaleString()}`} size="small" color="success" variant="outlined" />}
+                                    </Box>
+                                    <Typography variant="caption" display="block" mt={0.5} color="textSecondary">Performed on: {rec.repairDate}</Typography>
                                 </Paper>
                             ))}
                         </Stack>
                     )}
                 </DialogContent>
-                <DialogActions><Button onClick={() => setHistoryOpen(false)}>Close</Button></DialogActions>
+                <DialogActions sx={{ p: 2 }}><Button onClick={() => setHistoryOpen(false)} variant="contained">Close</Button></DialogActions>
             </Dialog>
 
         </Container>

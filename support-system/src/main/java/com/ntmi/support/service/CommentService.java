@@ -25,10 +25,10 @@ public class CommentService {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private NotificationService notificationService; // To notify updates
+    // ✅ REMOVED: NotificationService dependency is no longer needed here.
+    // It is now handled exclusively in the Controller layer.
 
-    // 1. Add Comment
+    // 1. Add Comment (Pure Data Logic Only)
     public Comment addComment(CommentDTO dto, Long userId) {
         Ticket ticket = ticketRepository.findById(dto.getTicketId())
                 .orElseThrow(() -> new RuntimeException("Ticket not found"));
@@ -42,30 +42,9 @@ public class CommentService {
         comment.setAuthor(author);
         comment.setCreatedAt(LocalDateTime.now());
 
-        Comment savedComment = commentRepository.save(comment);
-
-        // --- OPTIONAL: NOTIFY THE OTHER PARTY ---
-        // If Admin comments -> Notify Ticket Creator
-        // If Ticket Creator comments -> Notify Assigned Admin
-        User notificationTarget = null;
-        if (author.getUserId().equals(ticket.getCreatedBy().getUserId())) {
-            // It's the creator, notify admin (if assigned)
-            notificationTarget = ticket.getAssignedAdmin();
-        } else {
-            // It's an admin, notify creator
-            notificationTarget = ticket.getCreatedBy();
-        }
-
-        if (notificationTarget != null) {
-            notificationService.send(
-                notificationTarget,
-                "New Comment on Ticket #" + ticket.getTicketId(),
-                author.getFullName() + ": " + dto.getText(),
-                "INFO"
-            );
-        }
-
-        return savedComment;
+        // ✅ Save and return immediately. 
+        // No notification logic here (prevents double emails/popups).
+        return commentRepository.save(comment);
     }
 
     // 2. Get Comments for a Ticket

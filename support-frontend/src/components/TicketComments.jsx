@@ -1,27 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Box, Typography, TextField, IconButton, Paper, Avatar, 
-    CircularProgress
+    CircularProgress, Alert
 } from '@mui/material';
-import { Send } from '@mui/icons-material';
+import { Send, Lock } from '@mui/icons-material';
 import api from '../services/api';
 
-const TicketComments = ({ ticketId }) => {
+// ✅ Accept 'status' prop to control locking
+const TicketComments = ({ ticketId, status }) => {
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState("");
-    const [loading, setLoading] = useState(true); // Initial loading state
+    const [loading, setLoading] = useState(true);
     const bottomRef = useRef(null);
 
     const myUserId = parseInt(localStorage.getItem('userId'));
 
-    // 1. Fetch Comments Function
     const fetchComments = async (isBackground = false) => {
         try {
             const response = await api.get(`/comments/ticket/${ticketId}`);
             
-            // Only scroll down if it's the first load or if a new message arrived
             setComments(prev => {
-                // If length changed, we know there is a new message
                 if (prev.length !== response.data.length) {
                     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
                 }
@@ -35,35 +33,28 @@ const TicketComments = ({ ticketId }) => {
         }
     };
 
-    // 2. Auto-Polling (The Fix)
     useEffect(() => {
-        fetchComments(false); // Initial Load (show spinner)
-
-        // ✅ Poll every 3 seconds to check for new messages
+        fetchComments(false);
         const interval = setInterval(() => {
-            fetchComments(true); // Background load (no spinner)
+            fetchComments(true);
         }, 3000);
 
-        return () => clearInterval(interval); // Cleanup on close
+        return () => clearInterval(interval);
     }, [ticketId]);
 
-    // 3. Send Comment
     const handleSend = async () => {
         if (!newComment.trim()) return;
 
         try {
             const payload = { text: newComment, ticketId: ticketId };
-            // Optimistic update (optional, but waiting for server is safer for ID)
             await api.post('/comments', payload);
-            
-            setNewComment(""); // Clear input
-            fetchComments(true); // Refresh immediately
+            setNewComment(""); 
+            fetchComments(true); 
         } catch (error) {
             console.error("Failed to send comment");
         }
     };
 
-    // 4. Helper: Format Time
     const formatTime = (dateString) => {
         if(!dateString) return "";
         return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -78,6 +69,7 @@ const TicketComments = ({ ticketId }) => {
                 DISCUSSION & UPDATES
             </Typography>
 
+            {/* Chat History Area */}
             <Paper 
                 variant="outlined" 
                 sx={{ 
@@ -134,20 +126,47 @@ const TicketComments = ({ ticketId }) => {
                 <div ref={bottomRef} />
             </Paper>
 
-            {/* Input Area */}
-            <Box display="flex" gap={1} mt={2}>
-                <TextField 
-                    fullWidth 
-                    size="small" 
-                    placeholder="Type a message..." 
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                    sx={{ bgcolor: 'white' }}
-                />
-                <IconButton color="primary" onClick={handleSend} disabled={!newComment.trim()}>
-                    <Send />
-                </IconButton>
+            {/* ✅ CONDITIONAL RENDERING: Lock Chat if status is OPEN */}
+            <Box mt={2}>
+                {status === 'OPEN' ? (
+                    <Paper 
+                        variant="outlined" 
+                        sx={{ 
+                            p: 2, 
+                            bgcolor: '#f1f5f9', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            gap: 1,
+                            color: '#64748b'
+                        }}
+                    >
+                        <Lock fontSize="small" />
+                        <Typography variant="body2" fontWeight="bold">
+                            Chat is locked until an Admin accepts this ticket.
+                        </Typography>
+                    </Paper>
+                ) : (
+                    <Box display="flex" gap={1}>
+                        <TextField 
+                            fullWidth 
+                            size="small" 
+                            placeholder="Type a message..." 
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                            sx={{ bgcolor: 'white' }}
+                        />
+                        <IconButton 
+                            color="primary" 
+                            onClick={handleSend} 
+                            disabled={!newComment.trim()}
+                            sx={{ bgcolor: '#eff6ff', '&:hover': { bgcolor: '#dbeafe' } }}
+                        >
+                            <Send />
+                        </IconButton>
+                    </Box>
+                )}
             </Box>
         </Box>
     );

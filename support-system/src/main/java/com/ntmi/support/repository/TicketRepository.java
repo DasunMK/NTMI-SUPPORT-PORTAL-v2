@@ -25,6 +25,8 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     // ✅ NEW: Find tickets assigned to a specific admin (For Admin Profile)
     List<Ticket> findByAssignedAdmin_UserIdOrderByCreatedAtDesc(Long userId);
 
+    List<Ticket> findByAsset_AssetId(Long assetId);
+
     // --- GLOBAL COUNTS (For Admin Dashboard) ---
     long countByCreatedAtAfter(LocalDateTime date);
     long countByClosedAtAfter(LocalDateTime date);

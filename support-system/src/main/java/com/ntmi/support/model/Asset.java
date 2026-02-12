@@ -21,7 +21,6 @@ public class Asset {
     @Column(unique = true, nullable = false)
     private String assetCode; 
 
-    // ✅ Device Type (Mapped to DB column 'device_type')
     @Column(name = "device_type") 
     private String deviceType;  
 
@@ -36,6 +35,10 @@ public class Asset {
     @Column(name = "warranty_expiry")
     private LocalDate warrantyExpiry;
 
+    // ✅ NEW: Purchase Cost (Needed for Analytics)
+    @Column(name = "purchase_cost")
+    private Double purchaseCost;
+
     // ✅ Repair Tracking (Synced with SQL)
     @Column(name = "repair_count")
     private int repairCount = 0;
@@ -46,17 +49,27 @@ public class Asset {
 
     @ManyToOne
     @JoinColumn(name = "branch_id", nullable = false)
-    @JsonIgnoreProperties({"users", "tickets", "assets"}) // Prevents Infinite Loop
+    @JsonIgnoreProperties({"users", "tickets", "assets"}) 
     @ToString.Exclude 
     @EqualsAndHashCode.Exclude
     private Branch branch;
 
-    // ✅ NEW: Link to Repair History
-    // "mappedBy" refers to the 'asset' field in RepairRecord.java
-    // "cascade = Remove" means if you delete the Asset, the History is deleted too.
     @OneToMany(mappedBy = "asset", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnore // Important: Don't load history in the main list (fetched separately)
+    @JsonIgnore 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<RepairRecord> repairRecords;
+
+    // ✅ NEW: Calculated Field for Frontend (Not in DB)
+    // This holds the sum of all repair costs for this asset
+    @Transient 
+    private Double totalRepairCost;
+
+    public Double getTotalRepairCost() {
+        return totalRepairCost == null ? 0.0 : totalRepairCost;
+    }
+
+    public void setTotalRepairCost(Double totalRepairCost) {
+        this.totalRepairCost = totalRepairCost;
+    }
 }

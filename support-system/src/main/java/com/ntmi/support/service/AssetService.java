@@ -1,7 +1,10 @@
 package com.ntmi.support.service;
 
 import com.ntmi.support.dto.ReliabilityDTO;
+import com.ntmi.support.model.Asset;
+import com.ntmi.support.model.Ticket;
 import com.ntmi.support.repository.AssetRepository;
+import com.ntmi.support.repository.TicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +18,51 @@ public class AssetService {
 
     @Autowired
     private AssetRepository assetRepository;
+
+    @Autowired
+    private TicketRepository ticketRepository; // ✅ Required for cost calculation
+
+    // --- 1. Asset Management (Frontend) ---
+
+    // ✅ Get Assets by Branch (With calculated costs)
+    public List<Asset> getAssetsByBranch(Long branchId) {
+        List<Asset> assets = assetRepository.findByBranch_BranchId(branchId);
+        return calculateCostsForAssets(assets);
+    }
+
+    // ✅ Get All Assets (With calculated costs)
+    public List<Asset> getAllAssets() {
+        List<Asset> assets = assetRepository.findAll();
+        return calculateCostsForAssets(assets);
+    }
+
+    // ✅ Create / Update Asset
+    public Asset saveAsset(Asset asset) {
+        return assetRepository.save(asset);
+    }
+
+    // ✅ Helper: Calculates Total Repair Cost on the fly
+    private List<Asset> calculateCostsForAssets(List<Asset> assets) {
+        for (Asset asset : assets) {
+            // Find all tickets for this asset
+            List<Ticket> history = ticketRepository.findByAsset_AssetId(asset.getAssetId());
+            
+            // Sum up the repair costs (safely handling nulls)
+            double totalCost = history.stream()
+                .filter(t -> t.getRepairCost() != null)
+                .mapToDouble(Ticket::getRepairCost)
+                .sum();
+            
+            // Set the transient field
+            asset.setTotalRepairCost(totalCost);
+            
+            // Optional: Ensure repair count matches ticket history size
+            // asset.setRepairCount(history.size()); 
+        }
+        return assets;
+    }
+
+    // --- 2. Analytics & Reports ---
 
     public List<ReliabilityDTO> getReliabilityStats() {
         // 1. Get raw data

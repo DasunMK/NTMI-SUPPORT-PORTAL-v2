@@ -12,20 +12,23 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // This enables a simple memory-based message broker to send messages back to the client
-        // Clients (Frontend) will subscribe to paths starting with "/topic" or "/queue"
+        // 1. Enable simple broker for /topic (public) and /queue (private)
         config.enableSimpleBroker("/topic", "/queue");
         
-        // Messages sent from the client to the server should start with "/app"
+        // 2. Messages sent from the client to the server should start with "/app"
         config.setApplicationDestinationPrefixes("/app");
+
+        // 3. ✅ CRITICAL FOR NOTIFICATIONS: 
+        // This tells Spring that paths starting with "/user" are for specific users.
+        // It allows 'messagingTemplate.convertAndSendToUser' to work.
+        config.setUserDestinationPrefix("/user"); 
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // This is the URL the Frontend connects to: http://localhost:8080/ws
-        // We enable SockJS fallback options for browsers that don't support WebSocket
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*") // Allow React to connect
-                .withSockJS();
+                .setAllowedOriginPatterns("*") // Allow React (localhost:3000) to connect
+                .withSockJS(); // Enable SockJS fallback
     }
 }

@@ -47,11 +47,11 @@ const Layout = ({ children }) => {
 
     // --- Admin Menu ---
     const adminMenu = [
-        { text: 'Overview', icon: <Dashboard />, path: '/admin-dashboard' },
+        { text: 'Dashboard', icon: <Dashboard />, path: '/admin-dashboard' },
         { text: 'Manage Assets', icon: <Devices />, path: '/assets' },
-        { text: 'Hardware Health', icon: <HealthAndSafety />, path: '/dashboard/reliability' },
+        // { text: 'Hardware Health', icon: <HealthAndSafety />, path: '/dashboard/reliability' },
         { text: 'Manage Users', icon: <Group />, path: '/admin/users' },
-        { text: 'Ticket Reports', icon: <Assessment />, path: '/admin/reports' },
+        { text: 'Ticket History', icon: <Assessment />, path: '/admin/reports' },
         { text: 'System Settings', icon: <Settings />, path: '/admin/settings' },
         { text: 'My Profile', icon: <Person />, path: '/profile' },
     ];
@@ -92,7 +92,7 @@ const Layout = ({ children }) => {
                         NTMI SUPPORT
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>
-                        PORTAL v2.0
+                        PORTAL
                     </Typography>
                 </Box>
             </Box>
