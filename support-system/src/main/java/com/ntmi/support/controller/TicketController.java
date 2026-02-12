@@ -1,8 +1,10 @@
 package com.ntmi.support.controller;
 
+import com.ntmi.support.dto.ReliabilityDTO;
 import com.ntmi.support.dto.TicketDTO;
 import com.ntmi.support.model.*;
 import com.ntmi.support.repository.*;
+import com.ntmi.support.service.AssetService;
 import com.ntmi.support.service.NotificationService;
 import com.ntmi.support.service.TicketService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,9 +16,11 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -26,14 +30,15 @@ public class TicketController {
     @Autowired private TicketService ticketService;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
-    
+    @Autowired private AssetService assetService; // ✅ Added to fetch Failure Stats
+
     @Autowired private TicketRepository ticketRepository;
     @Autowired private AssetRepository assetRepository;
     @Autowired private ErrorCategoryRepository categoryRepository;
     @Autowired private ErrorTypeRepository typeRepository;
     @Autowired private RepairRecordRepository repairRecordRepository;
     
-    // ✅ NEW: Inject TicketImageRepository
+    // ✅ Inject TicketImageRepository
     @Autowired private TicketImageRepository ticketImageRepository; 
 
     // --- SHARED ACTIONS ---
@@ -74,13 +79,13 @@ public class TicketController {
             // 1. Save Ticket
             Ticket savedTicket = ticketRepository.save(ticket);
 
-            // ✅ 2. NEW LOGIC: Save Images
+            // 2. Save Images
             if (dto.getImages() != null && !dto.getImages().isEmpty()) {
                 for (String base64Image : dto.getImages()) {
                     if (base64Image != null && !base64Image.isEmpty()) {
                         TicketImage image = new TicketImage();
                         image.setBase64Data(base64Image);
-                        image.setTicket(savedTicket); // Link to the saved ticket
+                        image.setTicket(savedTicket);
                         ticketImageRepository.save(image);
                     }
                 }
@@ -98,21 +103,64 @@ public class TicketController {
             return ResponseEntity.ok(savedTicket);
 
         } catch (Exception e) {
-            e.printStackTrace(); // Helpful for debugging
+            e.printStackTrace();
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
     }
 
-    // ✅ NEW: Get tickets created by a specific user (For Branch User Profile)
+    // --- PROFILE ACTIONS ---
     @GetMapping("/created-by/{userId}")
     public List<Ticket> getTicketsByCreator(@PathVariable Long userId) {
         return ticketRepository.findByCreatedBy_UserIdOrderByCreatedAtDesc(userId);
     }
 
-    // ✅ NEW: Get tickets assigned to a specific admin (For Admin Profile)
     @GetMapping("/assigned-to/{adminId}")
     public List<Ticket> getTicketsByAssignee(@PathVariable Long adminId) {
         return ticketRepository.findByAssignedAdmin_UserIdOrderByCreatedAtDesc(adminId);
+    }
+
+    // --- GET RELIABILITY STATS (UPDATED) ---
+    @GetMapping("/reliability")
+    public ResponseEntity<Map<String, Object>> getReliabilityStats() {
+        Map<String, Object> stats = new HashMap<>();
+
+        // 1. Past Due Tickets (Older than 48 hours)
+        LocalDateTime twoDaysAgo = LocalDateTime.now().minusHours(48);
+        long pastDueCount = ticketRepository.countPastDueTickets(twoDaysAgo);
+        stats.put("pastDueTickets", pastDueCount);
+
+        // 2. Total Resolved Tickets
+        stats.put("totalResolved", ticketRepository.findAllResolvedTickets().size());
+
+        // 3. Total Repair Cost
+        Double totalCost = repairRecordRepository.sumTotalCost();
+        stats.put("totalRepairCost", totalCost != null ? totalCost : 0.0);
+
+        // 4. Avg Resolution Time (Hours)
+        // Requires SQL Server Native Query in Repository
+        Double avgTime = ticketRepository.getAverageResolutionTime();
+        stats.put("avgResolutionHours", avgTime != null ? Math.round(avgTime * 10.0) / 10.0 : 0.0);
+
+        // 5. Asset Availability (%)
+        // Requires SQL Server Native Query in Repository
+        Double availability = ticketRepository.calculateAssetAvailability();
+        stats.put("assetAvailability", availability != null ? Math.round(availability) : 100);
+
+        // 6. Top Failing Assets (Using AssetService)
+        List<ReliabilityDTO> reliabilityStats = assetService.getReliabilityStats();
+        
+        // Map DTO to structure expected by Frontend (brand, model, count)
+        List<Map<String, Object>> assetFailures = reliabilityStats.stream().limit(5).map(dto -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("brand", "N/A"); // DTO focuses on modelName
+            map.put("model", dto.getModelName());
+            map.put("count", dto.getTotalFailures());
+            return map;
+        }).collect(Collectors.toList());
+        
+        stats.put("topFailingAssets", assetFailures);
+
+        return ResponseEntity.ok(stats);
     }
 
     @GetMapping("/branch/{branchId}")

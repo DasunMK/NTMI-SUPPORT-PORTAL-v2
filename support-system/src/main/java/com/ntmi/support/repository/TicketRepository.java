@@ -46,5 +46,32 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     List<Ticket> findAllResolvedTickets();
 
     List<Ticket> findByCreatedAtAfter(LocalDateTime date);
-List<Ticket> findByBranch_BranchIdAndCreatedAtAfter(Long branchId, LocalDateTime date);
+    List<Ticket> findByBranch_BranchIdAndCreatedAtAfter(Long branchId, LocalDateTime date);
+
+    @Query("SELECT t.asset.brand, t.asset.model, COUNT(t) " +
+           "FROM Ticket t " +
+           "WHERE t.asset IS NOT NULL " +
+           "GROUP BY t.asset.brand, t.asset.model " +
+           "ORDER BY COUNT(t) DESC")
+    List<Object[]> findTopFailingAssets();
+
+
+        // Calculate average time (in hours) to resolve a ticket
+      // In TicketRepository.java
+
+// 1. Average Resolution Time (SQL Server Native)
+       @Query(value = "SELECT AVG(DATEDIFF(hour, created_at, resolved_at)) " +
+              "FROM tickets " +
+              "WHERE status = 'RESOLVED' AND resolved_at IS NOT NULL", 
+              nativeQuery = true)
+       Double getAverageResolutionTime();
+
+       // 2. Asset Availability (SQL Server Native)
+       @Query(value = "SELECT ((SELECT COUNT(*) FROM assets) - COUNT(DISTINCT asset_id)) * 100.0 / (SELECT COUNT(*) FROM assets) " +
+              "FROM tickets " +
+              "WHERE status IN ('OPEN', 'IN_PROGRESS')", 
+              nativeQuery = true)
+       Double calculateAssetAvailability();
+
+    
 }

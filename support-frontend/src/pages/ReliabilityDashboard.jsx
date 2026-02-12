@@ -1,369 +1,297 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-    Container, Grid, Paper, Typography, Box, Table, TableBody, 
-    TableCell, TableContainer, TableHead, TableRow, Chip, 
-    LinearProgress, Button, Avatar, Stack, MenuItem, TextField,
-    Tooltip, IconButton
+    Container, Paper, Typography, Box, CircularProgress, 
+    Avatar, Chip, LinearProgress, Fade, Stack, Grid, Tooltip, Divider
 } from '@mui/material';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-    ResponsiveContainer, Cell, AreaChart, Area, Legend, PieChart, Pie
-} from 'recharts';
-import { 
-    Print, Speed, BuildCircle, MonetizationOn, EventBusy, 
-    TrendingUp, FilterList, Warning, CheckCircle, Cancel,
-    HealthAndSafety
+    Warning, Build, Speed, AssignmentTurnedIn,
+    ErrorOutline, AttachMoney, AccessTime, BatteryChargingFull, CheckCircle
 } from '@mui/icons-material';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { toast } from 'react-toastify';
 import api from '../services/api';
 
-// --- HELPERS FOR BUSINESS LOGIC ---
-
-// 1. Calculate Asset Health Score (0 - 100)
-const calculateHealthScore = (asset) => {
-    // Logic: Start with 100. Deduct points for bad behavior.
-    let score = 100;
-    
-    // Penalty 1: Repairs (Heavy penalty) -> -10 per repair
-    score -= (asset.repairCount || 0) * 10;
-
-    // Penalty 2: Cost Ratio (If repairs cost > 50% of asset value, huge penalty)
-    const costRatio = asset.purchaseCost > 0 ? (asset.totalRepairCost / asset.purchaseCost) : 0;
-    score -= (costRatio * 100) * 0.5; 
-
-    // Penalty 3: Age Factor (Older assets lose points slightly)
-    // Assuming 5 years is standard life. 
-    const ageYears = asset.ageInMonths / 12;
-    if (ageYears > 3) score -= 5;
-    if (ageYears > 5) score -= 15;
-
-    // Clamp score between 0 and 100
-    return Math.max(0, Math.min(100, Math.round(score)));
+// --- STYLES & HELPERS ---
+const getProgressColor = (value) => {
+    if (value > 10) return '#ef4444'; 
+    if (value > 5) return '#f59e0b';  
+    return '#3b82f6';                 
 };
 
-// 2. Determine Recommendation based on Score & Cost
-const getRecommendation = (score, asset) => {
-    const costRatio = asset.purchaseCost > 0 ? (asset.totalRepairCost / asset.purchaseCost) : 0;
-
-    if (costRatio > 0.6) return { action: 'REPLACE', reason: 'Repair Cost > 60% of Value', color: 'error' };
-    if (score < 40) return { action: 'REPLACE', reason: 'Critical Health Score', color: 'error' };
-    if (score < 70) return { action: 'MONITOR', reason: 'Declining Reliability', color: 'warning' };
-    return { action: 'KEEP', reason: 'Healthy Asset', color: 'success' };
-};
-
-// 3. KPI Card Component
-const KpiCard = ({ title, value, icon, color, subtitle }) => (
-    <Paper elevation={0} sx={{ p: 3, borderRadius: 4, height: '100%', background: `linear-gradient(145deg, #ffffff, ${color}08)`, border: `1px solid ${color}20`, boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-        <Box display="flex" justifyContent="space-between" alignItems="start" mb={2}>
+// Component for Standard KPI Cards
+const KpiPaper = ({ title, value, sub, icon, color, bgGradient }) => (
+    <Paper 
+        elevation={0} 
+        sx={{ 
+            p: 3, borderRadius: 4, 
+            background: bgGradient || 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+            border: `1px solid ${color}20`,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center'
+        }}
+    >
+        <Box display="flex" alignItems="center" gap={2} mb={1}>
+            <Avatar sx={{ bgcolor: `${color}15`, color: color, width: 48, height: 48 }}>{icon}</Avatar>
             <Box>
-                <Typography variant="h4" fontWeight="800" sx={{ color: color, letterSpacing: -1 }}>{value}</Typography>
-                <Typography variant="subtitle2" fontWeight="bold" color="textSecondary" mt={0.5}>{title}</Typography>
+                <Typography variant="h4" fontWeight="800" sx={{ color: '#1e293b' }}>{value}</Typography>
+                <Typography variant="caption" fontWeight="bold" color="textSecondary" textTransform="uppercase">{title}</Typography>
             </Box>
-            <Avatar sx={{ bgcolor: `${color}15`, color: color, width: 56, height: 56, borderRadius: 3 }}>{icon}</Avatar>
         </Box>
-        {subtitle && <Chip label={subtitle} size="small" sx={{ bgcolor: `${color}10`, color: color, fontWeight: 'bold' }} />}
+        {sub && <Typography variant="body2" color="textSecondary" sx={{ ml: 8, mt: -1 }}>{sub}</Typography>}
+    </Paper>
+);
+
+// Component for Financial/Cost Cards (Currency format)
+// ✅ Fixed: Added (value || 0) to prevent crash if data is undefined
+const CurrencyPaper = ({ title, value, sub, icon, color }) => (
+    <Paper 
+        elevation={0} 
+        sx={{ 
+            p: 3, borderRadius: 4, 
+            background: 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
+            border: '1px solid #fcd34d',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center'
+        }}
+    >
+        <Box display="flex" alignItems="center" gap={2} mb={1}>
+            <Avatar sx={{ bgcolor: '#fef3c7', color: '#d97706', width: 48, height: 48 }}>{icon}</Avatar>
+            <Box>
+                <Typography variant="h4" fontWeight="800" sx={{ color: '#78350f' }}>
+                    Rs. {(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="caption" fontWeight="bold" color="textSecondary" textTransform="uppercase">{title}</Typography>
+            </Box>
+        </Box>
+        {sub && <Typography variant="body2" color="textSecondary" sx={{ ml: 8, mt: -1 }}>{sub}</Typography>}
     </Paper>
 );
 
 const ReliabilityDashboard = () => {
-    // --- State ---
-    const [kpi, setKpi] = useState({ totalSpend: 0, avgMttr: 0, criticalAssets: 0, mtbf: 0 });
-    const [assetAnalysis, setAssetAnalysis] = useState([]); // The processed table data
-    const [failureDistribution, setFailureDistribution] = useState([]); 
-    const [costData, setCostData] = useState([]);
-    
-    // --- Filters ---
-    const [branchFilter, setBranchFilter] = useState('All');
-    const [branches, setBranches] = useState([]);
-    const [dateRange, setDateRange] = useState('6M'); 
-
     const [loading, setLoading] = useState(true);
-    const [exporting, setExporting] = useState(false);
-    
-    const reportRef = useRef(null);
+    const [stats, setStats] = useState({
+        pastDueTickets: 0,
+        totalResolved: 0,
+        topFailingAssets: [],
+        totalRepairCost: 0,
+        avgResolutionHours: 0,
+        assetAvailability: 100
+    });
 
-    // --- PDF Export Logic ---
-    const handleExportPDF = async () => {
-        const input = reportRef.current;
-        if (!input) return;
-        setExporting(true);
+    useEffect(() => {
+        fetchReliabilityData();
+    }, []);
+
+    const fetchReliabilityData = async () => {
         try {
-            const canvas = await html2canvas(input, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgProps = pdf.getImageProperties(imgData);
-            const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-            let heightLeft = imgHeight;
-            let position = 0;
-
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft >= 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-                heightLeft -= pdfHeight;
-            }
-            pdf.save(`NTMI_Strategic_Analysis_${new Date().toISOString().slice(0,10)}.pdf`);
+            const response = await api.get('/tickets/reliability');
+            setStats(response.data);
         } catch (error) {
-            console.error("PDF Export Failed:", error);
+            console.error(error);
+            toast.error("Failed to load reliability data");
         } finally {
-            setExporting(false);
+            setLoading(false);
         }
     };
 
-    // --- Data Fetching & Processing ---
-    useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            try {
-                // 1. Fetch Basic Data
-                const branchRes = await api.get('/master-data/branches');
-                setBranches(branchRes.data);
+    // ✅ Fixed: Safe calculation to prevent NaN crashes
+    const maxFailures = Math.max(...stats.topFailingAssets.map(a => a.count || 0), 1);
 
-                const params = { branch: branchFilter === 'All' ? null : branchFilter, range: dateRange };
-                
-                // 2. Fetch Raw Analytics
-                const [kpiRes, rawAssetsRes, costRes, pieRes] = await Promise.all([
-                    api.get('/analytics/kpi', { params }),
-                    api.get('/analytics/assets-detailed', { params }), // Expects detailed asset list
-                    api.get('/analytics/costs', { params }),
-                    api.get('/analytics/failure-distribution', { params }) 
-                ]);
-
-                // 3. Process Asset Logic (Client Side Calculation)
-                const processedAssets = rawAssetsRes.data.map(asset => {
-                    const score = calculateHealthScore(asset);
-                    const recommendation = getRecommendation(score, asset);
-                    
-                    return {
-                        ...asset,
-                        healthScore: score,
-                        recommendation: recommendation,
-                        mtbf: asset.repairCount > 0 ? (asset.ageInMonths / asset.repairCount).toFixed(1) : 'N/A',
-                        costRatio: asset.purchaseCost > 0 ? ((asset.totalRepairCost / asset.purchaseCost) * 100).toFixed(1) : 0
-                    };
-                });
-
-                // Sort by Health Score (Critical first)
-                processedAssets.sort((a, b) => a.healthScore - b.healthScore);
-
-                setKpi(kpiRes.data);
-                setAssetAnalysis(processedAssets);
-                setCostData(costRes.data);
-                setFailureDistribution(pieRes.data);
-
-            } catch (err) {
-                console.error("Failed to load dashboard data", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadData();
-    }, [branchFilter, dateRange]);
-
-    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
-
-    if (loading) return <LinearProgress />;
+    if (loading) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" height="80vh">
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     return (
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
-            
-            {/* HEADER & FILTERS */}
-            <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: 4, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                <Box display="flex" flexDirection={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems="center" gap={3}>
-                    <Box>
-                        <Typography variant="h4" fontWeight="800" sx={{ color: '#0f172a', letterSpacing: -1 }}>
-                            Asset Reliability & Life Cycle
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                            Strategic analysis for procurement and replacement decisions.
-                        </Typography>
-                    </Box>
-                    
-                    <Stack direction="row" spacing={2} alignItems="center">
-                        <TextField 
-                            select size="small" label="Filter Branch" value={branchFilter} 
-                            onChange={(e) => setBranchFilter(e.target.value)} 
-                            sx={{ minWidth: 150, bgcolor: 'white' }}
-                        >
-                            <MenuItem value="All">All Branches</MenuItem>
-                            {branches.map(b => <MenuItem key={b.branchId} value={b.branchId}>{b.branchName}</MenuItem>)}
-                        </TextField>
-
-                        <Button 
-                            variant="contained" 
-                            startIcon={exporting ? <LinearProgress sx={{ width: 20 }} /> : <Print />} 
-                            onClick={handleExportPDF} 
-                            disabled={exporting}
-                            sx={{ bgcolor: '#0f172a', fontWeight: 'bold', height: 40 }}
-                        >
-                            {exporting ? "Generating..." : "Export Report"}
-                        </Button>
-                    </Stack>
-                </Box>
-            </Paper>
-
-            {/* REPORTABLE AREA */}
-            <div ref={reportRef} style={{ padding: '20px', backgroundColor: 'white' }}>
+        <Fade in={true} timeout={600}>
+            <Container maxWidth="xl" sx={{ mt: 4, mb: 6 }}>
                 
-                {/* 1. KEY METRICS */}
-                <Typography variant="h6" fontWeight="bold" mb={2} color="textSecondary">EXECUTIVE SUMMARY</Typography>
-                <Grid container spacing={3} mb={5}>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <KpiCard title="Total Maint. Spend" value={`Rs. ${kpi.totalSpend.toLocaleString()}`} icon={<MonetizationOn />} color="#7c3aed" subtitle="Life Cycle Cost" />
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <KpiCard title="Avg. Asset Health" value={`${Math.round(assetAnalysis.reduce((acc, curr) => acc + curr.healthScore, 0) / (assetAnalysis.length || 1))}/100`} icon={<HealthAndSafety />} color="#10b981" subtitle="Overall Score" />
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <KpiCard title="Replace Recommended" value={assetAnalysis.filter(a => a.recommendation.action === 'REPLACE').length} icon={<Cancel />} color="#ef4444" subtitle="Critical Condition" />
-                    </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
-                        <KpiCard title="Monitor Closely" value={assetAnalysis.filter(a => a.recommendation.action === 'MONITOR').length} icon={<Warning />} color="#f59e0b" subtitle="Declining Health" />
-                    </Grid>
-                </Grid>
-
-                {/* 2. CHARTS */}
-                <Grid container spacing={4} mb={5}>
-                    <Grid item xs={12} lg={8}>
-                        <Paper elevation={0} sx={{ p: 4, borderRadius: 4, border: '1px solid #e2e8f0', height: '100%' }}>
-                            <Box display="flex" justifyContent="space-between" mb={2}>
-                                <Typography variant="h6" fontWeight="800" color="#0f172a">Financial Impact (Maintenance Spend)</Typography>
-                            </Box>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <AreaChart data={costData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                    <defs>
-                                        <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.8}/>
-                                            <stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/>
-                                        </linearGradient>
-                                    </defs>
-                                    <XAxis dataKey="month" />
-                                    <YAxis />
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <RechartsTooltip />
-                                    <Area type="monotone" dataKey="totalCost" stroke="#7c3aed" fillOpacity={1} fill="url(#colorCost)" />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </Paper>
-                    </Grid>
-                    <Grid item xs={12} lg={4}>
-                        <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: '1px solid #e2e8f0', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <Typography variant="h6" fontWeight="800" color="#0f172a" mb={2}>Failure Categories</Typography>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    <Pie data={failureDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                        {failureDistribution.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <RechartsTooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </Paper>
-                    </Grid>
-                </Grid>
-
-                {/* 3. THE STRATEGIC RELIABILITY TABLE */}
-                <Paper elevation={0} sx={{ borderRadius: 4, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                    <Box p={3} bgcolor="#f1f5f9" borderBottom="1px solid #e2e8f0" display="flex" alignItems="center" gap={2}>
-                        <BuildCircle color="primary" />
+                {/* HEADER */}
+                <Paper 
+                    elevation={0} 
+                    sx={{ 
+                        p: 4, mb: 5, borderRadius: 4, 
+                        background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', 
+                        color: 'white', boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.3)' 
+                    }}
+                >
+                    <Box display="flex" alignItems="center" gap={3}>
+                        <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.15)', width: 64, height: 64 }}><Speed fontSize="large" /></Avatar>
                         <Box>
-                            <Typography variant="h6" fontWeight="800" color="#1e293b">Asset Life Cycle & Reliability Analysis</Typography>
-                            <Typography variant="caption" color="textSecondary">Decision support for repair vs. replace scenarios based on Health Score.</Typography>
+                            <Typography variant="h4" fontWeight="800">Advanced Reliability Monitor</Typography>
+                            <Typography variant="body1" sx={{ opacity: 0.7 }}>National Transport Medical Institute • Financial & Operational Health</Typography>
                         </Box>
                     </Box>
-                    <TableContainer>
-                        <Table size="small">
-                            <TableHead sx={{ bgcolor: '#fff' }}>
-                                <TableRow>
-                                    <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>ASSET</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>AGE</TableCell>
-                                    <TableCell align="center" sx={{ fontWeight: 'bold', color: '#64748b' }}>REPAIRS</TableCell>
-                                    <TableCell align="center" sx={{ fontWeight: 'bold', color: '#64748b' }}>MTBF (Mo)</TableCell>
-                                    <TableCell align="right" sx={{ fontWeight: 'bold', color: '#64748b' }}>REPAIR COST</TableCell>
-                                    <TableCell align="center" sx={{ fontWeight: 'bold', color: '#64748b' }}>COST %</TableCell>
-                                    <TableCell align="center" sx={{ fontWeight: 'bold', color: '#64748b' }}>HEALTH</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold', color: '#64748b' }}>RECOMMENDATION</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {assetAnalysis.map((row) => (
-                                    <TableRow key={row.assetId} hover>
-                                        <TableCell>
-                                            <Typography variant="body2" fontWeight="bold" color="#0f172a">{row.brand} {row.model}</Typography>
-                                            <Typography variant="caption" color="textSecondary">{row.assetCode}</Typography>
-                                        </TableCell>
-                                        <TableCell>{(row.ageInMonths / 12).toFixed(1)} Yrs</TableCell>
-                                        <TableCell align="center">
-                                            <Chip label={row.repairCount} size="small" sx={{ fontWeight: 'bold', bgcolor: '#f1f5f9' }} />
-                                        </TableCell>
-                                        <TableCell align="center">{row.mtbf}</TableCell>
-                                        <TableCell align="right">
-                                            <Typography variant="body2" fontWeight="bold">Rs. {row.totalRepairCost.toLocaleString()}</Typography>
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            <Chip 
-                                                label={`${row.costRatio}%`} 
-                                                size="small" 
-                                                color={row.costRatio > 50 ? 'error' : row.costRatio > 25 ? 'warning' : 'default'} 
-                                                variant={row.costRatio > 50 ? 'filled' : 'outlined'}
-                                            />
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            <Box position="relative" display="inline-flex">
-                                                <CircularProgress 
-                                                    variant="determinate" 
-                                                    value={row.healthScore} 
-                                                    color={row.healthScore < 50 ? 'error' : row.healthScore < 75 ? 'warning' : 'success'}
-                                                    size={35}
-                                                />
-                                                <Box top={0} left={0} bottom={0} right={0} position="absolute" display="flex" alignItems="center" justifyContent="center">
-                                                    <Typography variant="caption" component="div" color="text.secondary" fontWeight="bold">
-                                                        {row.healthScore}
-                                                    </Typography>
-                                                </Box>
-                                            </Box>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Stack direction="row" alignItems="center" spacing={1}>
-                                                {row.recommendation.action === 'REPLACE' ? <Cancel color="error" fontSize="small"/> : 
-                                                 row.recommendation.action === 'MONITOR' ? <Warning color="warning" fontSize="small"/> : 
-                                                 <CheckCircle color="success" fontSize="small"/>}
-                                                <Box>
-                                                    <Chip 
-                                                        label={row.recommendation.action} 
-                                                        size="small" 
-                                                        color={row.recommendation.color} 
-                                                        sx={{ fontWeight: '900', fontSize: '0.65rem', height: 20 }} 
-                                                    />
-                                                    <Typography variant="caption" display="block" color="textSecondary" fontSize="0.65rem">
-                                                        {row.recommendation.reason}
-                                                    </Typography>
-                                                </Box>
-                                            </Stack>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
                 </Paper>
 
-                {/* Footer for Report */}
-                <Box mt={4} pt={2} borderTop="1px solid #e2e8f0" display="flex" justifyContent="space-between">
-                    <Typography variant="caption" color="textSecondary">Generated by NTMI Support Portal</Typography>
-                    <Typography variant="caption" color="textSecondary">{new Date().toLocaleString()}</Typography>
-                </Box>
-            </div>
-        </Container>
+                {/* TOP SECTION: CRITICAL METRICS - ✅ Updated for MUI v6 (Removed 'item', updated 'size') */}
+                <Grid container spacing={3} mb={5}>
+                    
+                    {/* Past Due */}
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <KpiPaper 
+                            title="Past Due Tickets" 
+                            value={stats.pastDueTickets} 
+                            sub="Open > 48 Hours" 
+                            icon={<Warning />} 
+                            color="#ef4444"
+                            bgGradient="linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)"
+                        />
+                    </Grid>
+
+                    {/* Availability */}
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                         <Paper 
+                            elevation={0} 
+                            sx={{ 
+                                p: 3, borderRadius: 4, 
+                                background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)',
+                                border: '1px solid #bbf7d0',
+                                height: '100%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            <Box display="flex" alignItems="center" gap={2} mb={2}>
+                                <Avatar sx={{ bgcolor: '#dcfce7', color: '#15803d', width: 48, height: 48 }}><BatteryChargingFull /></Avatar>
+                                <Box>
+                                    <Typography variant="h4" fontWeight="800" sx={{ color: '#14532d' }}>{stats.assetAvailability || 0}%</Typography>
+                                    <Typography variant="caption" fontWeight="bold" color="textSecondary" textTransform="uppercase">Asset Availability</Typography>
+                                </Box>
+                            </Box>
+                            <Box display="flex" alignItems="center" gap={2} sx={{ ml: 8 }}>
+                                <Box width="100%">
+                                    <Tooltip title="Percentage of assets currently functional">
+                                        {/* ✅ Fixed: Added fallback value */}
+                                        <LinearProgress 
+                                            variant="determinate" 
+                                            value={stats.assetAvailability || 0} 
+                                            sx={{ 
+                                                height: 8, borderRadius: 5, 
+                                                backgroundColor: '#f1f5f9',
+                                                [`& .MuiLinearProgress-bar`]: { backgroundColor: '#16a34a', borderRadius: 5 }
+                                            }} 
+                                        />
+                                    </Tooltip>
+                                </Box>
+                            </Box>
+                        </Paper>
+                    </Grid>
+
+                    {/* Avg Resolution Time */}
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <KpiPaper 
+                            title="Avg Fix Time" 
+                            value={stats.avgResolutionHours + "h"} 
+                            sub="Hours to Resolve" 
+                            icon={<AccessTime />} 
+                            color="#3b82f6"
+                            bgGradient="linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)"
+                        />
+                    </Grid>
+
+                    {/* Financial Cost */}
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                        <CurrencyPaper 
+                            title="Total Repair Cost" 
+                            value={stats.totalRepairCost} 
+                            sub="Lifetime Expense" 
+                            icon={<AttachMoney />} 
+                            color="#d97706"
+                        />
+                    </Grid>
+
+                </Grid>
+
+                {/* BOTTOM SECTION: FAILURE ANALYSIS - ✅ Updated for MUI v6 */}
+                <Grid container spacing={3}>
+                    
+                    {/* Top Failing Assets */}
+                    <Grid size={{ xs: 12, md: 8 }}>
+                        <Paper elevation={0} sx={{ p: 4, borderRadius: 4, border: '1px solid #e2e8f0', height: '100%' }}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+                                <Box display="flex" alignItems="center" gap={2}>
+                                    <Avatar sx={{ bgcolor: '#fee2e2', color: '#ef4444' }}><Build /></Avatar>
+                                    <Box>
+                                        <Typography variant="h6" fontWeight="800">Top Failing Assets</Typography>
+                                        <Typography variant="caption" color="textSecondary">Equipment requiring frequent repairs</Typography>
+                                    </Box>
+                                </Box>
+                                <Chip label="Top 5" size="small" color="error" variant="outlined" />
+                            </Box>
+
+                            {stats.topFailingAssets.length > 0 ? (
+                                <Stack spacing={3}>
+                                    {stats.topFailingAssets.map((item, index) => {
+                                        const percentage = (item.count / maxFailures) * 100;
+                                        const color = getProgressColor(item.count);
+                                        return (
+                                            <Box key={index}>
+                                                <Box display="flex" justifyContent="space-between" mb={1}>
+                                                    <Typography variant="subtitle1" fontWeight="bold" color="#334155">
+                                                        {item.brand} {item.model}
+                                                    </Typography>
+                                                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: color }}>
+                                                        {item.count} Failures
+                                                    </Typography>
+                                                </Box>
+                                                <LinearProgress 
+                                                    variant="determinate" 
+                                                    value={percentage} 
+                                                    sx={{ 
+                                                        height: 10, borderRadius: 5, 
+                                                        backgroundColor: '#f1f5f9',
+                                                        [`& .MuiLinearProgress-bar`]: { backgroundColor: color, borderRadius: 5 }
+                                                    }} 
+                                                />
+                                            </Box>
+                                        );
+                                    })}
+                                </Stack>
+                            ) : (
+                                <Box textAlign="center" py={4} sx={{ opacity: 0.5 }}>
+                                    <CheckCircle sx={{ fontSize: 48, mb: 1, color: '#10b981' }} />
+                                    <Typography>Excellent! No failure data recorded yet.</Typography>
+                                </Box>
+                            )}
+                        </Paper>
+                    </Grid>
+
+                    {/* Quick Summary / Status */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+                         <Paper elevation={0} sx={{ p: 4, borderRadius: 4, border: '1px solid #e2e8f0', height: '100%', bgcolor: '#f8fafc' }}>
+                            <Typography variant="h6" fontWeight="bold" mb={3} sx={{ color: '#334155' }}>System Status Summary</Typography>
+                            
+                            <Stack spacing={2}>
+                                <Box display="flex" alignItems="center" gap={2}>
+                                    <Avatar sx={{ width: 32, height: 32, bgcolor: 'white' }}><AssignmentTurnedIn fontSize="small" color="success" /></Avatar>
+                                    <Typography variant="body2" color="textSecondary">System has recorded <strong>{stats.totalResolved}</strong> total resolutions.</Typography>
+                                </Box>
+                                <Divider />
+                                <Box display="flex" alignItems="center" gap={2}>
+                                    <Avatar sx={{ width: 32, height: 32, bgcolor: 'white' }}><AttachMoney fontSize="small" color="warning" /></Avatar>
+                                    <Typography variant="body2" color="textSecondary">Maintenance budget utilization is active.</Typography>
+                                </Box>
+                                <Divider />
+                                <Box display="flex" alignItems="center" gap={2}>
+                                    <Avatar sx={{ width: 32, height: 32, bgcolor: 'white' }}><Speed fontSize="small" color="primary" /></Avatar>
+                                    <Typography variant="body2" color="textSecondary">Average fix time currently optimized.</Typography>
+                                </Box>
+                            </Stack>
+                         </Paper>
+                    </Grid>
+
+                </Grid>
+
+            </Container>
+        </Fade>
     );
 };
 

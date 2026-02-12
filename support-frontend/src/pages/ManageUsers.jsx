@@ -3,10 +3,10 @@ import {
     Container, Paper, Typography, Box, Button, Table, TableBody, TableCell, 
     TableContainer, TableHead, TableRow, Chip, IconButton, Dialog, 
     DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Fade,
-    InputAdornment, Stack, Divider, Avatar, Tooltip, Badge
+    InputAdornment, Stack, Divider, Avatar, Tooltip
 } from '@mui/material';
 import { 
-    Add, Edit, Delete, Search, Download, FilterList, Security, Business, Key, 
+    Add, Edit, Search, Download, FilterList, Security, Business, 
     Person, Email, AdminPanelSettings, Block, CheckCircle, RestoreFromTrash
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -140,20 +140,19 @@ const ManageUsers = () => {
         }
     };
 
-
     const handleToggleStatus = async (user) => {
         if (user.active) {
-            
             if(!window.confirm("Are you sure you want to DEACTIVATE this user? They will lose access immediately.")) return;
             try {
+                // Calls DELETE endpoint which sets active=false (Soft Delete)
                 await api.delete(`/users/${user.userId}`);
                 toast.success("User deactivated");
                 fetchData();
             } catch (error) { toast.error("Deactivation failed"); }
         } else {
-            
             if(!window.confirm("Do you want to REACTIVATE this account?")) return;
             try {
+                // Calls PUT endpoint which sets active=true
                 await api.put(`/users/${user.userId}/activate`);
                 toast.success("User account restored");
                 fetchData();
@@ -178,7 +177,7 @@ const ManageUsers = () => {
                     <Box sx={{ position: 'relative', zIndex: 1 }}>
                         <Typography variant="h4" fontWeight="800" sx={{ mb: 0.5 }}>User Management</Typography>
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ opacity: 0.8 }}>
-                            <Badge sx={{ fontSize: 16 }} />
+                            <Person sx={{ fontSize: 16 }} />
                             <Typography variant="body1">Total Accounts: <strong>{users.length}</strong></Typography>
                         </Stack>
                     </Box>
@@ -241,7 +240,6 @@ const ManageUsers = () => {
                                     <TableCell>
                                         <Chip icon={u.role === 'ADMIN' ? <AdminPanelSettings sx={{ fontSize: '16px !important' }} /> : <Security sx={{ fontSize: '16px !important' }} />} label={u.role === 'BRANCH_USER' ? 'Branch User' : 'Admin'} color={u.role === 'ADMIN' ? 'error' : 'primary'} size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />
                                     </TableCell>
-                                   
                                     <TableCell>
                                         <Chip 
                                             label={u.active ? "Active" : "Inactive"} 
@@ -262,7 +260,6 @@ const ManageUsers = () => {
                                             <Tooltip title="Edit">
                                                 <IconButton color="primary" size="small" onClick={() => handleOpen(u)} sx={{ bgcolor: '#eff6ff' }}><Edit fontSize="small" /></IconButton>
                                             </Tooltip>
-                                          
                                             <Tooltip title={u.active ? "Deactivate User" : "Reactivate User"}>
                                                 <IconButton 
                                                     color={u.active ? "error" : "success"} 
@@ -281,9 +278,12 @@ const ManageUsers = () => {
                     </Table>
                 </TableContainer>
 
-                {/* Dialog (Same as before) */}
+                {/* Dialog */}
                 <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                    <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white' }}>{isEdit ? 'Update User' : 'Add New User'}</DialogTitle>
+                    {/* ✅ FIXED: Removed inner Typography to avoid <h2><h6> nesting error */}
+                    <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 'bold' }}>
+                        {isEdit ? 'Update User' : 'Add New User'}
+                    </DialogTitle>
                     <DialogContent sx={{ mt: 3 }}>
                         <Stack spacing={3}>
                              <Box display="flex" gap={2}>

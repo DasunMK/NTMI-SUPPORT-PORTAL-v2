@@ -29,4 +29,8 @@ public interface RepairRecordRepository extends JpaRepository<RepairRecord, Long
 List<RepairRecord> findByRepairDateAfter(LocalDate date);
 List<RepairRecord> findByAsset_Branch_BranchIdAndRepairDateAfter(Long branchId, LocalDate date);
 
+    // Calculate total lifetime cost of all repairs
+    @Query("SELECT SUM(r.cost) FROM RepairRecord r")
+    Double sumTotalCost();
+
 }

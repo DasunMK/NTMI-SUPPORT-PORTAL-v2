@@ -70,24 +70,22 @@ public class UserService implements UserDetailsService {
         return userRepository.save(existing);
     }
 
-
-    // Inside UserService class
-public void changePassword(Long userId, String currentPassword, String newPassword) {
-    User user = userRepository.findById(userId)
+    // CHANGE PASSWORD (Self Service)
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found"));
 
-    // Verify old password
-    if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
-        throw new RuntimeException("Incorrect current password");
+        // Verify old password
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new RuntimeException("Incorrect current password");
+        }
+
+        // Save new password
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
     }
 
-    // Save new password
-    user.setPassword(passwordEncoder.encode(newPassword));
-    userRepository.save(user);
-}
-
-    // DELETE (Admin)
-    public void deleteUser(Long id) {
-        userRepository.deleteById(id);
-    }
+    // ✅ REMOVED: deleteUser method. 
+    // Deletion is now handled via Soft Delete (Deactivate) logic in UserController 
+    // to prevent accidental data loss.
 }

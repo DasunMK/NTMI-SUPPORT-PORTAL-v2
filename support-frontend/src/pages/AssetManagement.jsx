@@ -4,13 +4,13 @@ import {
     TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle, 
     DialogContent, DialogActions, TextField, MenuItem, Box, Chip, Stack, 
     Select, ToggleButton, ToggleButtonGroup, 
-    InputAdornment, Avatar, Grid, LinearProgress, Divider
+    InputAdornment, Avatar, Grid, LinearProgress, Divider, Tooltip
 } from '@mui/material';
 
 import { 
     Add, Edit, CheckCircle, Build, DeleteForever, 
     Search, Download, Inventory, History, Close, Computer, EventBusy, Payments, ConfirmationNumber,
-    CalendarMonth, Business
+    Business, MonetizationOn
 } from '@mui/icons-material';
 
 import jsPDF from 'jspdf';
@@ -30,9 +30,9 @@ const getWarrantyDaysLeft = (expiryDate) => {
 // Helper: Status Color Logic
 const getStatusColor = (status) => {
     switch (status) {
-        case 'ACTIVE': return 'success';   // Green
-        case 'REPAIR': return 'warning';   // Orange
-        case 'DISPOSED': return 'error';   // Red
+        case 'ACTIVE': return 'success';   
+        case 'REPAIR': return 'warning';   
+        case 'DISPOSED': return 'error';   
         default: return 'default';
     }
 };
@@ -85,7 +85,7 @@ const AssetManagement = () => {
     const [formData, setFormData] = useState({
         assetCode: '', brand: '', deviceType: '', model: '', 
         serialNumber: '', status: 'ACTIVE', branchId: '', 
-        purchasedDate: '', warrantyExpiry: ''
+        purchasedDate: '', warrantyExpiry: '', purchaseCost: '' 
     });
 
     useEffect(() => {
@@ -173,14 +173,14 @@ const AssetManagement = () => {
         doc.setFontSize(10);
         doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 32);
 
-        const tableColumn = ["Asset Code", "Branch", "Device", "Serial No", "Status", "Warranty Exp"];
+        const tableColumn = ["Asset Code", "Branch", "Device", "Serial No", "Status", "Cost"];
         const tableRows = filteredAssets.map(asset => [
             asset.assetCode,
             asset.branch?.branchName || "-",
             `${asset.brand} ${asset.model}`,
             asset.serialNumber,
             asset.status,
-            asset.warrantyExpiry || "N/A"
+            asset.purchaseCost ? `Rs. ${asset.purchaseCost}` : "-"
         ]);
 
         autoTable(doc, {
@@ -202,8 +202,9 @@ const AssetManagement = () => {
                 assetCode: asset.assetCode, brand: asset.brand, deviceType: asset.deviceType || '', 
                 model: asset.model, serialNumber: asset.serialNumber, status: asset.status,
                 branchId: asset.branch?.branchId || (selectedBranchId === 'ALL' ? (branches[0]?.branchId || '') : selectedBranchId),
-                purchasedDate: asset.purchasedDate ? asset.purchasedDate.split('T')[0] : '', // Handle Date format
-                warrantyExpiry: asset.warrantyExpiry ? asset.warrantyExpiry.split('T')[0] : ''
+                purchasedDate: asset.purchasedDate ? asset.purchasedDate.split('T')[0] : '', 
+                warrantyExpiry: asset.warrantyExpiry ? asset.warrantyExpiry.split('T')[0] : '',
+                purchaseCost: asset.purchaseCost || ''
             });
             setCurrentAsset(asset);
         } else {
@@ -211,7 +212,7 @@ const AssetManagement = () => {
                 assetCode: '', brand: '', deviceType: '', model: '', 
                 serialNumber: '', status: 'ACTIVE', 
                 branchId: selectedBranchId === 'ALL' ? (branches[0]?.branchId || '') : selectedBranchId, 
-                purchasedDate: '', warrantyExpiry: '' 
+                purchasedDate: '', warrantyExpiry: '', purchaseCost: '' 
             });
             setCurrentAsset(null);
         }
@@ -260,12 +261,12 @@ const AssetManagement = () => {
                 </Stack>
             </Paper>
 
-            {/* STAT CARDS */}
+            {/* STAT CARDS - MUI v6 SYNTAX */}
             <Grid container spacing={3} mb={5}>
-                <Grid item xs={12} sm={6} md={3}><StatCard title="Total Inventory" count={stats.total} icon={<Inventory />} color="#334155" /></Grid>
-                <Grid item xs={12} sm={6} md={3}><StatCard title="In Service" count={stats.active} icon={<CheckCircle />} color="#10b981" /></Grid>
-                <Grid item xs={12} sm={6} md={3}><StatCard title="Repairing" count={stats.repair} icon={<Build />} color="#f59e0b" /></Grid>
-                <Grid item xs={12} sm={6} md={3}><StatCard title="DISPOSED" count={stats.disposed} icon={<DeleteForever />} color="#e11d48" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="Total Inventory" count={stats.total} icon={<Inventory />} color="#334155" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="In Service" count={stats.active} icon={<CheckCircle />} color="#10b981" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="Repairing" count={stats.repair} icon={<Build />} color="#f59e0b" /></Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 3 }}><StatCard title="DISPOSED" count={stats.disposed} icon={<DeleteForever />} color="#e11d48" /></Grid>
             </Grid>
 
             {/* FILTERS */}
@@ -317,7 +318,7 @@ const AssetManagement = () => {
                                         </Box>
                                     </TableCell>
 
-                                    {/* 2. Branch Name (not Code) */}
+                                    {/* 2. Branch Name */}
                                     <TableCell>
                                         <Stack direction="row" alignItems="center" gap={1}>
                                             <Business sx={{ fontSize: 16, color: '#94a3b8' }} />
@@ -329,10 +330,17 @@ const AssetManagement = () => {
 
                                     {/* 3. Device Details */}
                                     <TableCell>
-                                        <Typography variant="body2" fontWeight="700" color="#1e293b">{asset.brand} {asset.model}</Typography>
-                                        <Typography variant="caption" color="textSecondary" sx={{ fontFamily: 'monospace', bgcolor: '#f1f5f9', px: 0.5, borderRadius: 0.5 }}>
-                                            SN: {asset.serialNumber}
-                                        </Typography>
+                                        <Box>
+                                            <Typography variant="body2" fontWeight="700" color="#1e293b">{asset.brand} {asset.model}</Typography>
+                                            <Typography variant="caption" color="textSecondary" sx={{ fontFamily: 'monospace', bgcolor: '#f1f5f9', px: 0.5, borderRadius: 0.5 }}>
+                                                SN: {asset.serialNumber}
+                                            </Typography>
+                                            {asset.purchaseCost && (
+                                                <Tooltip title="Purchase Cost">
+                                                    <Chip size="small" icon={<MonetizationOn sx={{fontSize: 14}} />} label={`Rs. ${asset.purchaseCost}`} sx={{ mt: 0.5, fontSize: '0.7rem', height: 22 }} />
+                                                </Tooltip>
+                                            )}
+                                        </Box>
                                     </TableCell>
 
                                     {/* 4. Warranty */}
@@ -363,7 +371,7 @@ const AssetManagement = () => {
                                         />
                                     </TableCell>
 
-                                    {/* 6. Status (Color Coded) */}
+                                    {/* 6. Status */}
                                     <TableCell>
                                         <Chip 
                                             label={asset.status} 
@@ -395,8 +403,9 @@ const AssetManagement = () => {
 
             {/* ASSET DETAILS DIALOG */}
             <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                {/* ✅ FIXED: Removed inner Typography to avoid <h2><h6> nesting error */}
                 <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="h6" fontWeight="bold">Asset Profile</Typography>
+                    Asset Profile
                     <IconButton onClick={() => setDetailsOpen(false)} sx={{ color: 'white' }}><Close /></IconButton>
                 </DialogTitle>
                 <DialogContent sx={{ mt: 2 }}>
@@ -409,11 +418,13 @@ const AssetManagement = () => {
                                     <Typography variant="body2" color="textSecondary">{currentAsset.brand} {currentAsset.model}</Typography>
                                 </Box>
                             </Stack>
+                            {/* ✅ FIXED: MUI v6 Grid Syntax */}
                             <Grid container spacing={3}>
-                                <Grid item xs={6}><Typography variant="caption" fontWeight="bold" color="textSecondary">SERIAL NO</Typography><Typography variant="body1" fontWeight="700">{currentAsset.serialNumber}</Typography></Grid>
-                                <Grid item xs={6}><Typography variant="caption" fontWeight="bold" color="textSecondary">BRANCH</Typography><Typography variant="body1" fontWeight="700">{currentAsset.branch?.branchName}</Typography></Grid>
-                                <Grid item xs={6}><Typography variant="caption" fontWeight="bold" color="textSecondary">PURCHASE DATE</Typography><Typography variant="body1" fontWeight="700">{currentAsset.purchasedDate || 'N/A'}</Typography></Grid>
-                                <Grid item xs={6}><Typography variant="caption" fontWeight="bold" color="textSecondary">REPAIR COUNT</Typography><Typography variant="body1" fontWeight="700">{currentAsset.repairCount || 0} repairs</Typography></Grid>
+                                <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">SERIAL NO</Typography><Typography variant="body1" fontWeight="700">{currentAsset.serialNumber}</Typography></Grid>
+                                <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">BRANCH</Typography><Typography variant="body1" fontWeight="700">{currentAsset.branch?.branchName}</Typography></Grid>
+                                <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">PURCHASE DATE</Typography><Typography variant="body1" fontWeight="700">{currentAsset.purchasedDate || 'N/A'}</Typography></Grid>
+                                <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">REPAIR COUNT</Typography><Typography variant="body1" fontWeight="700">{currentAsset.repairCount || 0} repairs</Typography></Grid>
+                                <Grid size={{ xs: 12 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">TOTAL REPAIR COST</Typography><Typography variant="h6" fontWeight="800" color="#7c3aed">Rs. {(currentAsset.totalRepairCost || 0).toLocaleString()}</Typography></Grid>
                             </Grid>
                         </Box>
                     )}
@@ -428,7 +439,10 @@ const AssetManagement = () => {
 
             {/* REGISTER / EDIT DIALOG */}
             <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 'bold' }}>{currentAsset ? `Edit Asset` : "Register New Asset"}</DialogTitle>
+                {/* ✅ FIXED: Removed inner Typography to avoid <h2><h6> nesting error */}
+                <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 'bold' }}>
+                    {currentAsset ? `Edit Asset` : "Register New Asset"}
+                </DialogTitle>
                 <DialogContent sx={{ mt: 3 }}>
                     <Stack spacing={3}>
                         {userRole === 'ADMIN' && (
@@ -446,25 +460,19 @@ const AssetManagement = () => {
                             <TextField label="Serial No" sx={{ flex: 1 }} value={formData.serialNumber} onChange={(e) => setFormData({...formData, serialNumber: e.target.value})} />
                         </Box>
                         
-                        {/* ✅ ADDED: Purchase Date Field */}
                         <Box sx={{ display: 'flex', gap: 2 }}>
-                            <TextField 
-                                label="Purchase Date" 
-                                type="date" 
-                                sx={{ flex: 1 }} 
-                                InputLabelProps={{ shrink: true }} 
-                                value={formData.purchasedDate} 
-                                onChange={(e) => setFormData({...formData, purchasedDate: e.target.value})} 
-                            />
-                            <TextField 
-                                label="Warranty Exp" 
-                                type="date" 
-                                sx={{ flex: 1 }} 
-                                InputLabelProps={{ shrink: true }} 
-                                value={formData.warrantyExpiry} 
-                                onChange={(e) => setFormData({...formData, warrantyExpiry: e.target.value})} 
-                            />
+                            <TextField label="Purchase Date" type="date" sx={{ flex: 1 }} InputLabelProps={{ shrink: true }} value={formData.purchasedDate} onChange={(e) => setFormData({...formData, purchasedDate: e.target.value})} />
+                            <TextField label="Warranty Exp" type="date" sx={{ flex: 1 }} InputLabelProps={{ shrink: true }} value={formData.warrantyExpiry} onChange={(e) => setFormData({...formData, warrantyExpiry: e.target.value})} />
                         </Box>
+
+                         <TextField 
+                            label="Purchase Cost" 
+                            type="number" 
+                            fullWidth 
+                            value={formData.purchaseCost} 
+                            onChange={(e) => setFormData({...formData, purchaseCost: e.target.value})} 
+                            InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }}
+                        />
 
                         <Box>
                             <Typography variant="caption" color="textSecondary" sx={{ mb: 1, display: 'block' }}>Current Status</Typography>
@@ -481,8 +489,12 @@ const AssetManagement = () => {
 
             {/* MAINTENANCE LOG DIALOG */}
             <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                {/* ✅ FIXED: Removed variant="h6" from Typography to avoid nesting error */}
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#f1f5f9' }}>
-                    <Box display="flex" alignItems="center" gap={1.5}><History color="primary"/><Typography variant="h6" fontWeight="800">Maintenance Log</Typography></Box>
+                    <Box display="flex" alignItems="center" gap={1.5}>
+                        <History color="primary"/>
+                        <Typography fontWeight="800">Maintenance Log</Typography>
+                    </Box>
                     <IconButton onClick={() => setHistoryOpen(false)} size="small"><Close /></IconButton>
                 </DialogTitle>
                 <DialogContent sx={{ bgcolor: '#f8fafc', pt: 3 }}>

@@ -49,7 +49,7 @@ const Layout = ({ children }) => {
     const adminMenu = [
         { text: 'Dashboard', icon: <Dashboard />, path: '/admin-dashboard' },
         { text: 'Manage Assets', icon: <Devices />, path: '/assets' },
-        // { text: 'Hardware Health', icon: <HealthAndSafety />, path: '/dashboard/reliability' },
+        { text: 'Hardware Health', icon: <HealthAndSafety />, path: '/dashboard/reliability' },
         { text: 'Manage Users', icon: <Group />, path: '/admin/users' },
         { text: 'Ticket History', icon: <Assessment />, path: '/admin/reports' },
         { text: 'System Settings', icon: <Settings />, path: '/admin/settings' },
