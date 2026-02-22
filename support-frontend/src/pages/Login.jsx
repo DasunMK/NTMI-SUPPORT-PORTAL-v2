@@ -63,7 +63,15 @@ const Login = () => {
             }
 
             toast.success(`Welcome back, ${usernameVal}!`);
-            navigate(role === 'ADMIN' ? '/admin-dashboard' : '/dashboard');
+            
+            // ✅ FIXED: Smart Routing based on exact role
+            if (role === 'ADMIN') {
+                navigate('/admin-dashboard');
+            } else if (role === 'SUPER_ADMIN' || role === 'ACCOUNT_HEAD') {
+                navigate('/approvals');
+            } else {
+                navigate('/dashboard'); 
+            }
 
         } catch (error) {
             console.error("Login Error:", error);
@@ -186,7 +194,6 @@ const Login = () => {
                                     <Box display="flex" justifyContent="flex-end" mt={1}>
                                         <Typography
                                             variant="caption"
-                                            // ✅ UPDATED: Opens /help in a new tab
                                             onClick={() => window.open('/help', '_blank')}
                                             sx={{ 
                                                 fontWeight: 'bold', color: 'primary.main', cursor: 'pointer',

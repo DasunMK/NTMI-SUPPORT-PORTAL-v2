@@ -1,5 +1,6 @@
 package com.ntmi.support.controller;
 
+import com.ntmi.support.model.Role;
 import com.ntmi.support.model.User;
 import com.ntmi.support.repository.UserRepository;
 import com.ntmi.support.service.UserService;
@@ -15,7 +16,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = "*") 
+@CrossOrigin(origins = "*")
 public class UserController {
 
     @Autowired
@@ -28,67 +29,116 @@ public class UserController {
     private PasswordEncoder passwordEncoder;
 
     // 1. Get All Users
+    // ✅ Secured: Only Admins and Super Admins can view the full user list
     @GetMapping
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public List<User> getAllUsers() {
         return userService.getAllUsers();
     }
 
     // 2. Get Single User
+    // ✅ FIXED: Removed @PreAuthorize so users can view their own profiles!
     @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable Long id) {
+    public ResponseEntity<?> getUserById(@PathVariable Long id, Authentication auth) {
+        User currentUser = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Security Check: If a Branch User tries to view someone else's ID, block them.
+        if (currentUser.getRole() == Role.BRANCH_USER && !currentUser.getUserId().equals(id)) {
+            return ResponseEntity.status(403).body("{\"message\": \"Access Denied. You can only view your own profile.\"}");
+        }
+
         return userService.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // 3. Create User
+    // 3. Create User (Secure)
     @PostMapping
-    @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<User> createUser(@RequestBody User user) {
-        user.setActive(true); // Ensure new users are active by default
-        return ResponseEntity.ok(userService.createUser(user));
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> createUser(@RequestBody User user, Authentication auth) {
+        try {
+            // Fetch the creator (Current Logged In User)
+            User creator = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
+
+            // Ensure the user is active by default
+            user.setActive(true);
+
+            // Pass creator to service for Security Check (Prevents Privilege Escalation)
+            User createdUser = userService.createUser(user, creator);
+            return ResponseEntity.ok(createdUser);
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     // 4. Update User
+    // ✅ FIXED: Removed @PreAuthorize so users can update their own details!
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
-        return ResponseEntity.ok(userService.updateUser(id, user));
-    }
+    public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody User user, Authentication auth) {
+        try {
+            // Fetch the modifier
+            User modifier = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("Authenticated user not found"));
 
-    // ✅ 5. UPDATED: Soft Delete (Deactivate) instead of Delete
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<?> deactivateUser(@PathVariable Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+            // Security Check: Branch users can only update their own profile
+            if (modifier.getRole() == Role.BRANCH_USER && !modifier.getUserId().equals(id)) {
+                return ResponseEntity.status(403).body("{\"message\": \"Access Denied. You can only edit your own profile.\"}");
+            }
 
-        // If already inactive, maybe we want to reactivate? (Optional toggle logic)
-        // For now, let's just force deactivate.
-        if (!user.isActive()) {
-            return ResponseEntity.badRequest().body("User is already inactive.");
+            User updatedUser = userService.updateUser(id, user, modifier);
+            return ResponseEntity.ok(updatedUser);
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
-
-        user.setActive(false); // Mark as inactive
-        userRepository.save(user);
-
-        return ResponseEntity.ok().body("{\"message\": \"User deactivated successfully. Access revoked.\"}");
     }
-    
-    // ✅ 6. Reactivate User (Optional Helper Endpoint)
+
+    // 5. Soft Delete (Deactivate)
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> deactivateUser(@PathVariable Long id) {
+        try {
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // SECURITY: Prevent deactivating a Super Admin via API
+            if (user.getRole() == Role.SUPER_ADMIN) {
+                return ResponseEntity.status(403).body("{\"message\": \"Cannot deactivate a Super Admin.\"}");
+            }
+
+            if (!user.isActive()) {
+                return ResponseEntity.badRequest().body("{\"message\": \"User is already inactive.\"}");
+            }
+
+            user.setActive(false);
+            userRepository.save(user);
+
+            return ResponseEntity.ok().body("{\"message\": \"User deactivated successfully. Access revoked.\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"message\": \"Error deactivating user: " + e.getMessage() + "\"}");
+        }
+    }
+
+    // 6. Reactivate User
     @PutMapping("/{id}/activate")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<?> activateUser(@PathVariable Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        user.setActive(true);
-        userRepository.save(user);
-        return ResponseEntity.ok().body("{\"message\": \"User account reactivated.\"}");
+        try {
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            user.setActive(true);
+            userRepository.save(user);
+            return ResponseEntity.ok().body("{\"message\": \"User account reactivated.\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"message\": \"Error reactivating user: " + e.getMessage() + "\"}");
+        }
     }
 
-    // 7. Change Password
+    // 7. Change Password (Self Service)
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(@RequestBody Map<String, String> payload, Authentication auth) {
         try {
@@ -100,20 +150,15 @@ public class UserController {
             String newPassword = payload.get("newPassword");
 
             if (currentPassword == null || newPassword == null) {
-                return ResponseEntity.badRequest().body("Both passwords required.");
+                return ResponseEntity.badRequest().body("{\"message\": \"Both current and new passwords are required.\"}");
             }
 
-            if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
-                return ResponseEntity.badRequest().body("Incorrect current password.");
-            }
+            userService.changePassword(user.getUserId(), currentPassword, newPassword);
 
-            user.setPassword(passwordEncoder.encode(newPassword));
-            userRepository.save(user);
+            return ResponseEntity.ok().body("{\"message\": \"Password updated successfully.\"}");
 
-            return ResponseEntity.ok("Password updated successfully.");
-
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body("{\"message\": \"Error: " + e.getMessage() + "\"}");
         }
     }
 }

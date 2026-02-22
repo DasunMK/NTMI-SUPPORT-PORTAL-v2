@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
     Box, Drawer, AppBar, Toolbar, List, Typography, Divider, IconButton, 
     ListItem, ListItemButton, ListItemIcon, ListItemText, Avatar, Tooltip,
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, Stack, useTheme
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, Stack
 } from '@mui/material';
 import { 
     Menu as MenuIcon, Dashboard, AddCircle, Person, Help, 
     Logout, AdminPanelSettings, Group, Assessment, Settings,
-    Devices, HealthAndSafety, AccessTime
+    Devices, HealthAndSafety, AccessTime, VerifiedUser, AttachMoney
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import NotificationBell from './NotificationBell'; 
@@ -21,22 +21,24 @@ const Layout = ({ children }) => {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [logoutOpen, setLogoutOpen] = useState(false);
     
-    // ✅ NEW: State for Real-Time Clock
+    // State for Real-Time Clock
     const [currentTime, setCurrentTime] = useState(new Date());
 
-    const role = localStorage.getItem('role');
+    // ✅ FIX: Safe retrieval of role with fallback
+    const role = localStorage.getItem('role'); 
     const username = localStorage.getItem('username') || 'User';
 
-    // ✅ NEW: Update time every second
+    // Update time every second
     useEffect(() => {
         const timer = setInterval(() => {
             setCurrentTime(new Date());
         }, 1000);
 
-        return () => clearInterval(timer); // Cleanup on unmount
+        return () => clearInterval(timer); 
     }, []);
 
-    // --- Branch User Menu ---
+    // --- 1. Define Menu Items per Role ---
+    
     const branchMenu = [
         { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
         { text: 'My Assets', icon: <Devices />, path: '/assets' },
@@ -45,21 +47,38 @@ const Layout = ({ children }) => {
         { text: 'Help & Support', icon: <Help />, path: '/help' },
     ];
 
-    // --- Admin Menu ---
     const adminMenu = [
         { text: 'Dashboard', icon: <Dashboard />, path: '/admin-dashboard' },
         { text: 'Manage Assets', icon: <Devices />, path: '/assets' },
         { text: 'Hardware Health', icon: <HealthAndSafety />, path: '/dashboard/reliability' },
         { text: 'Manage Users', icon: <Group />, path: '/admin/users' },
-        { text: 'Ticket History', icon: <Assessment />, path: '/admin/reports' },
-        { text: 'System Settings', icon: <Settings />, path: '/admin/settings' },
+        { text: 'Reports', icon: <Assessment />, path: '/admin/reports' },
+        { text: 'Settings', icon: <Settings />, path: '/admin/settings' },
         { text: 'My Profile', icon: <Person />, path: '/profile' },
     ];
 
-    const menuItems = role === 'ADMIN' ? adminMenu : branchMenu;
+    const superAdminMenu = [
+        { text: 'Approvals', icon: <VerifiedUser />, path: '/approvals' },
+        { text: 'Manage Users', icon: <Group />, path: '/admin/users' },
+        { text: 'All Reports', icon: <Assessment />, path: '/admin/reports' },
+        { text: 'My Profile', icon: <Person />, path: '/profile' },
+    ];
+
+    const financeMenu = [
+        { text: 'Approvals', icon: <AttachMoney />, path: '/approvals' },
+        { text: 'Financial Reports', icon: <Assessment />, path: '/admin/reports' },
+        { text: 'My Profile', icon: <Person />, path: '/profile' },
+    ];
+
+    // --- 2. Select Menu based on Role ---
+    let menuItems = branchMenu;
+    if (role === 'ADMIN') menuItems = adminMenu;
+    else if (role === 'SUPER_ADMIN') menuItems = superAdminMenu;
+    else if (role === 'ACCOUNT_HEAD') menuItems = financeMenu;
 
     const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
     const handleLogoutClick = () => setLogoutOpen(true);
+    
     const confirmLogout = () => {
         localStorage.clear();
         setLogoutOpen(false);
@@ -75,7 +94,7 @@ const Layout = ({ children }) => {
             background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)', 
             color: 'white' 
         }}>
-            {/* 1. Sidebar Header */}
+            {/* Sidebar Header */}
             <Box sx={{ p: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box 
                     sx={{ 
@@ -99,7 +118,7 @@ const Layout = ({ children }) => {
 
             <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: 3 }} />
 
-            {/* 2. Navigation Items */}
+            {/* Navigation Items */}
             <List sx={{ flexGrow: 1, px: 2, mt: 3 }}>
                 {menuItems.map((item) => {
                     const isActive = location.pathname === item.path;
@@ -143,7 +162,7 @@ const Layout = ({ children }) => {
                 })}
             </List>
 
-            {/* 3. User Profile Card at Bottom */}
+            {/* User Profile Card at Bottom */}
             <Box sx={{ p: 2 }}>
                 <Box 
                     sx={{ 
@@ -160,7 +179,8 @@ const Layout = ({ children }) => {
                 >
                     <Avatar 
                         sx={{ 
-                            bgcolor: '#3b82f6', width: 40, height: 40, 
+                            bgcolor: role === 'SUPER_ADMIN' ? '#fbbf24' : '#3b82f6', 
+                            width: 40, height: 40, 
                             fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' 
                         }}
                     >
@@ -170,8 +190,9 @@ const Layout = ({ children }) => {
                         <Typography variant="body2" fontWeight="bold" color="white" noWrap>
                             {username}
                         </Typography>
+                        {/* ✅ FIXED: Safe replace with fallback */}
                         <Typography variant="caption" color="rgba(255,255,255,0.6)" display="block">
-                            View Profile
+                            {(role || 'User').replace(/_/g, ' ')}
                         </Typography>
                     </Box>
                     <Tooltip title="Logout">
@@ -227,9 +248,7 @@ const Layout = ({ children }) => {
                     <Stack direction="row" alignItems="center" spacing={2}>
                         <NotificationBell />
                         
-                        
-                        
-                        {/* ✅ REAL-TIME CLOCK */}
+                        {/* REAL-TIME CLOCK */}
                         <Box textAlign="right" sx={{ display: { xs: 'none', sm: 'block' } }}>
                             <Typography variant="caption" color="text.secondary" display="block" sx={{ lineHeight: 1 }}>
                                 {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}

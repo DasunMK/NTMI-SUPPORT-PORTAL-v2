@@ -3,20 +3,21 @@ import {
     Container, Paper, Typography, Box, Chip, Button, 
     TextField, MenuItem, Dialog, DialogTitle, DialogContent, 
     DialogActions, Card, CardContent, Fade, CircularProgress,
-    InputAdornment, Divider, Alert, Stack, IconButton, Grid, Avatar, Tooltip
+    InputAdornment, Divider, Alert, Stack, IconButton, Grid, Avatar, Tooltip,
+    Radio, RadioGroup, FormControlLabel, FormControl, FormLabel
 } from '@mui/material';
 import { 
     Search, AssignmentLate, PendingActions, TaskAlt,
     FilterList, Dashboard, AccessTime, Close,
     ReportProblem, Computer, DeleteForever, CheckCircle, Business, Person,
-    Lock, 
-    Download as DownloadIcon 
+    Lock, Build, Engineering, Timeline, CloudUpload,
+    Download as DownloadIcon, WarningAmber
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import api from '../services/api'; 
 import TicketComments from '../components/TicketComments'; 
 
-// --- MODERN KPI CARD COMPONENT ---
+// --- KPI CARD ---
 const KpiCard = ({ title, value, icon, color, subtitle }) => (
     <Paper 
         elevation={0} 
@@ -58,6 +59,15 @@ const AdminDashboard = () => {
     const [actionType, setActionType] = useState(null); 
     const [resolutionText, setResolutionText] = useState('');
     const [repairCost, setRepairCost] = useState(''); 
+    const [varianceReason, setVarianceReason] = useState(''); 
+    
+    // Estimate Logic State
+    const [repairSource, setRepairSource] = useState('EXTERNAL'); 
+    const [repairDescription, setRepairDescription] = useState('');
+    
+    // Bill Upload State
+    const [billImage, setBillImage] = useState(null);
+    const [billFileName, setBillFileName] = useState("");
 
     const myId = parseInt(localStorage.getItem('userId'));
     const adminName = localStorage.getItem('username') || 'Administrator';
@@ -72,20 +82,20 @@ const AdminDashboard = () => {
 
             setStats({
                 unassigned: allData.filter(t => t.status === 'OPEN').length,
-                myActive: allData.filter(t => t.status === 'IN_PROGRESS' && t.assignedAdmin?.userId === myId).length,
+                myActive: allData.filter(t => (t.status === 'IN_PROGRESS' || t.status === 'APPROVED_FOR_REPAIR') && t.assignedAdmin?.userId === myId).length,
                 myResolved: allData.filter(t => t.status === 'RESOLVED' && t.assignedAdmin?.userId === myId).length
             });
 
-            const dashboardList = allData.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS');
+            const dashboardList = allData.filter(t => 
+                ['OPEN', 'PENDING_SUPER_ADMIN', 'PENDING_FINANCE', 'APPROVED_FOR_REPAIR', 'IN_PROGRESS'].includes(t.status)
+            );
             
             dashboardList.sort((a, b) => {
                 const isMyTaskA = a.assignedAdmin?.userId === myId;
                 const isMyTaskB = b.assignedAdmin?.userId === myId;
                 if (isMyTaskA && !isMyTaskB) return -1;
                 if (!isMyTaskA && isMyTaskB) return 1;
-                if (a.status === 'OPEN' && b.status !== 'OPEN') return -1;
-                if (a.status !== 'OPEN' && b.status === 'OPEN') return 1;
-                return new Date(a.createdAt) - new Date(b.createdAt);
+                return new Date(b.createdAt) - new Date(a.createdAt);
             });
 
             setTickets(dashboardList);
@@ -107,7 +117,6 @@ const AdminDashboard = () => {
         return () => clearInterval(intervalId); 
     }, []);
 
-    // --- Search Logic ---
     useEffect(() => {
         let result = tickets;
         if (searchQuery) {
@@ -126,43 +135,114 @@ const AdminDashboard = () => {
     }, [searchQuery, statusFilter, tickets]);
 
     // --- Actions ---
-    const handleStartTicket = async (ticketId) => {
+
+    const handleBillUpload = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setBillImage(reader.result);
+                setBillFileName(file.name);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSourceChange = (e) => {
+        setRepairSource(e.target.value);
+        setRepairCost(''); 
+    };
+
+    const handleSubmitEstimate = async () => {
+        if (!repairDescription.trim()) {
+            toast.warning("Please provide a technical description.");
+            return;
+        }
+
+        // ✅ FIX: Validate Cost
+        const costValue = parseFloat(repairCost) || 0;
+        if (costValue < 0) {
+            toast.error("Estimated cost cannot be negative.");
+            return;
+        }
+
+        if (repairSource === 'EXTERNAL' && repairCost === '') {
+            toast.warning("External repairs usually require a cost estimate.");
+            return;
+        }
+
         try {
-            await api.put(`/tickets/${ticketId}/start`);
-            toast.success("Ticket Assigned & Asset Marked for Repair");
+            await api.put(`/tickets/${selectedTicket.ticketId}/estimate`, { 
+                estimatedCost: costValue,
+                repairSource: repairSource,
+                repairDescription: repairDescription
+            });
+            toast.success("Estimate Sent for Approval");
+            setOpenDialog(false);
+            setRepairCost('');
+            setRepairDescription('');
+            fetchTickets();
+        } catch (error) { toast.error("Failed to submit estimate"); }
+    };
+
+    const handleStartWork = async () => {
+        try {
+            await api.put(`/tickets/${selectedTicket.ticketId}/start-work`);
+            toast.success("Repair Work Started");
             setOpenDialog(false);
             fetchTickets();
-        } catch (error) { toast.error("Failed to assign ticket"); }
+        } catch (error) { toast.error("Failed to start work"); }
     };
 
     const openResolutionPrompt = (type) => {
         setActionType(type);
         setResolutionText('');
         setRepairCost(''); 
+        setVarianceReason(''); 
+        setBillImage(null);
+        setBillFileName("");
         setOpenActionDialog(true);
     };
 
-    const submitResolution = async () => {
+    const submitFinalResolution = async () => {
         if (!resolutionText.trim()) {
             toast.warning("Please enter details about the action taken.");
             return;
         }
 
-        const payload = {
-            resolution: resolutionText,
-            cost: actionType === 'RESOLVE' ? (parseFloat(repairCost) || 0) : 0, 
-            disposeAsset: actionType === 'DISPOSE' ? 'true' : 'false'
+        // ✅ FIX: Validate Final Cost
+        const costValue = actionType === 'RESOLVE' ? (parseFloat(repairCost) || 0) : 0;
+        if (actionType === 'RESOLVE' && costValue < 0) {
+            toast.error("Final cost cannot be negative.");
+            return;
+        }
+
+        const estCost = selectedTicket.estimatedCost || 0;
+
+        // Logic: Check for Cost Overrun
+        if (actionType === 'RESOLVE' && costValue > estCost) {
+            if (!varianceReason.trim()) {
+                toast.warning(`Final cost exceeds estimate by Rs. ${costValue - estCost}. Please provide a reason.`);
+                return;
+            }
+        }
+        
+        const payload = { 
+            resolution: resolutionText, 
+            finalCost: costValue, 
+            disposeAsset: actionType === 'DISPOSE' ? 'true' : 'false',
+            billImage: billImage,
+            varianceReason: varianceReason 
         };
 
         try {
-            await api.put(`/tickets/${selectedTicket.ticketId}/close`, payload);
-            toast.success(actionType === 'DISPOSE' ? "Asset Disposed" : "Ticket Resolved & Repair Recorded");
+            await api.put(`/tickets/${selectedTicket.ticketId}/resolve-final`, payload);
+            if (actionType === 'DISPOSE') toast.success("Asset Disposed & Ticket Closed");
+            else toast.success("Repair Completed & Ticket Resolved");
             setOpenActionDialog(false);
             setOpenDialog(false);
             fetchTickets();
-        } catch (error) {
-            toast.error("Failed to update status");
-        }
+        } catch (error) { toast.error("Failed to update status"); }
     };
 
     const downloadImage = (base64Data, index) => {
@@ -176,11 +256,26 @@ const AdminDashboard = () => {
 
     const getCardStyles = (ticket) => {
         const isMine = ticket.assignedAdmin?.userId === myId;
-        if (ticket.status === 'IN_PROGRESS' && isMine) return { bg: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)', border: '#22c55e', iconColor: '#15803d', statusLabel: 'MY TASK', statusColor: 'success' };
-        if (ticket.status === 'IN_PROGRESS' && !isMine) return { bg: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)', border: '#3b82f6', iconColor: '#1d4ed8', statusLabel: 'IN PROGRESS', statusColor: 'primary' };
-        if (ticket.status === 'OPEN') return { bg: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)', border: '#ef4444', iconColor: '#b91c1c', statusLabel: 'OPEN', statusColor: 'error' };
-        return { bg: '#ffffff', border: '#e2e8f0', iconColor: '#64748b', statusLabel: ticket.status, statusColor: 'default' };
+        if (ticket.status === 'OPEN') return { bg: 'linear-gradient(135deg, #fff1f2 0%, #ffffff 100%)', border: '#fda4af', iconColor: '#e11d48', statusLabel: 'OPEN', statusColor: 'error' };
+        if (ticket.status.includes('PENDING')) return { bg: 'linear-gradient(135deg, #fff7ed 0%, #ffffff 100%)', border: '#fdba74', iconColor: '#ea580c', statusLabel: 'WAITING APPROVAL', statusColor: 'warning' };
+        if (ticket.status === 'APPROVED_FOR_REPAIR') return { bg: 'linear-gradient(135deg, #f3e8ff 0%, #ffffff 100%)', border: '#d8b4fe', iconColor: '#9333ea', statusLabel: 'READY TO START', statusColor: 'secondary' };
+        if (ticket.status === 'IN_PROGRESS' && isMine) return { bg: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)', border: '#4ade80', iconColor: '#16a34a', statusLabel: 'IN PROGRESS (YOU)', statusColor: 'success' };
+        return { bg: '#ffffff', border: '#e2e8f0', iconColor: '#64748b', statusLabel: ticket.status.replace('_', ' '), statusColor: 'default' };
     };
+
+    const getApprovalDetails = (status) => {
+        switch(status) {
+            case 'PENDING_SUPER_ADMIN': return { text: 'Waiting for Technical Director', color: 'warning.main' };
+            case 'PENDING_FINANCE': return { text: 'Waiting for Account Head', color: 'warning.main' };
+            case 'APPROVED_FOR_REPAIR': return { text: 'Fully Authorized', color: 'success.main' };
+            case 'REJECTED': return { text: 'Rejected by Management', color: 'error.main' };
+            default: return { text: 'N/A', color: 'text.secondary' };
+        }
+    };
+
+    const isOverrun = selectedTicket && actionType === 'RESOLVE' 
+        ? (parseFloat(repairCost) || 0) > (selectedTicket.estimatedCost || 0) 
+        : false;
 
     if (loading) return <Box display="flex" justifyContent="center" height="80vh" alignItems="center"><CircularProgress /></Box>;
 
@@ -188,7 +283,7 @@ const AdminDashboard = () => {
         <Fade in={true} timeout={600}>
             <Container maxWidth="xl" sx={{ mt: 4, mb: 6 }}>
                 
-                {/* 1. WELCOME BANNER */}
+                {/* 1. HEADER */}
                 <Paper elevation={0} sx={{ p: 4, mb: 5, borderRadius: 4, background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.3)' }}>
                     <Box sx={{ position: 'absolute', top: -100, right: -50, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%)' }} />
                     <Box display="flex" alignItems="center" gap={3} position="relative" zIndex={1}>
@@ -205,26 +300,20 @@ const AdminDashboard = () => {
 
                 {/* 2. KPI STATS */}
                 <Grid container spacing={3} mb={5}>
-                    <Grid item xs={12} md={4}><KpiCard title="Open Queue" value={stats.unassigned} icon={<AssignmentLate />} color="#e11d48" subtitle="Requires Assignment" /></Grid>
-                    <Grid item xs={12} md={4}><KpiCard title="My Tasks" value={stats.myActive} icon={<PendingActions />} color="#16a34a" subtitle="In Progress" /></Grid>
-                    <Grid item xs={12} md={4}><KpiCard title="Completed" value={stats.myResolved} icon={<TaskAlt />} color="#8b5cf6" subtitle="Resolved by You" /></Grid>
+                    <Grid size={{ xs: 12, md: 4 }}><KpiCard title="New Requests" value={stats.unassigned} icon={<AssignmentLate />} color="#e11d48" subtitle="Require Estimate" /></Grid>
+                    <Grid size={{ xs: 12, md: 4 }}><KpiCard title="My Active Jobs" value={stats.myActive} icon={<Build />} color="#16a34a" subtitle="Working or Ready" /></Grid>
+                    <Grid size={{ xs: 12, md: 4 }}><KpiCard title="Jobs Done" value={stats.myResolved} icon={<TaskAlt />} color="#8b5cf6" subtitle="Resolved by You" /></Grid>
                 </Grid>
 
                 {/* 3. FILTERS */}
                 <Paper sx={{ p: 2, mb: 4, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center', bgcolor: 'white', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }} elevation={0}>
-                    <TextField 
-                        size="small" 
-                        placeholder="Search ID, Branch or User..." 
-                        value={searchQuery} 
-                        onChange={(e) => setSearchQuery(e.target.value)} 
-                        InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action"/></InputAdornment>, sx: { borderRadius: 2 } }} 
-                        sx={{ flexGrow: 1 }} 
-                    />
+                    <TextField size="small" placeholder="Search ID, Branch or User..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action"/></InputAdornment>, sx: { borderRadius: 2 } }} sx={{ flexGrow: 1 }} />
                     <Box display="flex" alignItems="center" gap={1}>
                         <FilterList color="action" />
                         <TextField select size="small" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} sx={{ minWidth: 150 }}>
                             <MenuItem value="All">All Active</MenuItem>
-                            <MenuItem value="OPEN">Open Queue</MenuItem>
+                            <MenuItem value="OPEN">Open (New)</MenuItem>
+                            <MenuItem value="APPROVED_FOR_REPAIR">Ready for Repair</MenuItem>
                             <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
                         </TextField>
                     </Box>
@@ -235,26 +324,23 @@ const AdminDashboard = () => {
                     {filteredTickets.map((ticket) => {
                         const styles = getCardStyles(ticket);
                         return (
-                            <Grid item xs={12} sm={6} md={4} lg={3} key={ticket.ticketId} sx={{ display: 'flex' }}>
+                            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={ticket.ticketId} sx={{ display: 'flex' }}>
                                 <Card elevation={0} onClick={() => { setSelectedTicket(ticket); setOpenDialog(true); }} sx={{ width: '100%', borderRadius: 4, display: 'flex', flexDirection: 'column', background: styles.bg, border: `2px solid ${styles.border}`, cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', '&:hover': { transform: 'translateY(-6px)', boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)' } }}>
                                     <CardContent sx={{ flexGrow: 1, p: 3, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                         <Box display="flex" justifyContent="space-between" alignItems="start" mb={2}>
                                             <Chip label={`#${ticket.ticketId}`} size="small" sx={{ fontWeight: '800', bgcolor: 'white', border: '1px solid #e2e8f0', borderRadius: 1.5 }} />
                                             <Chip label={styles.statusLabel} size="small" color={styles.statusColor} sx={{ fontWeight: 'bold', borderRadius: 1.5 }} />
                                         </Box>
-                                        
                                         <Box mb={2}>
                                             <Typography variant="h6" fontWeight="800" sx={{ lineHeight: 1.3, mb: 1, color: '#0f172a' }}>{ticket.errorCategory?.categoryName}</Typography>
                                             {ticket.asset && ( <Chip icon={<Computer style={{ fontSize: 14 }} />} label={`${ticket.asset.brand} ${ticket.asset.model}`} size="small" sx={{ mb: 1, bgcolor: '#f1f5f9', color: '#475569', fontWeight: '600', border: '1px solid #cbd5e1', height: 24, fontSize: '0.75rem' }} /> )}
                                             <Typography variant="body2" fontWeight="500" color="text.secondary">{ticket.errorType?.typeName}</Typography>
                                         </Box>
-
                                         <Divider sx={{ borderStyle: 'dashed', mb: 2, opacity: 0.6 }} />
-                                        
                                         <Stack spacing={1.5}>
                                             <Box display="flex" alignItems="center" gap={1.5}><Business sx={{ fontSize: 18, color: styles.iconColor }} /><Typography variant="body2" fontWeight="600" color="#334155">{ticket.branch?.branchName}</Typography></Box>
-                                            <Box display="flex" alignItems="center" gap={1.5}><Person sx={{ fontSize: 18, color: styles.iconColor }} /><Typography variant="caption" color="text.secondary">Requester: <strong>{ticket.createdBy?.fullName?.split(' ')[0]}</strong></Typography></Box>
-                                            <Box display="flex" alignItems="center" gap={1.5}><AccessTime sx={{ fontSize: 18, color: styles.iconColor }} /><Typography variant="caption" color="text.secondary">{new Date(ticket.createdAt).toLocaleDateString()}</Typography></Box>
+                                            <Box display="flex" alignItems="center" gap={1.5}><Person sx={{ fontSize: 18, color: styles.iconColor }} /><Typography variant="caption" color="textSecondary">Requester: <strong>{ticket.createdBy?.fullName?.split(' ')[0]}</strong></Typography></Box>
+                                            <Box display="flex" alignItems="center" gap={1.5}><AccessTime sx={{ fontSize: 18, color: styles.iconColor }} /><Typography variant="caption" color="textSecondary">{new Date(ticket.createdAt).toLocaleDateString()}</Typography></Box>
                                         </Stack>
                                     </CardContent>
                                 </Card>
@@ -269,9 +355,9 @@ const AdminDashboard = () => {
                         <>
                             <Box sx={{ p: 3, borderBottom: '1px solid #e2e8f0', bgcolor: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
                                 <Box display="flex" alignItems="center" gap={2}>
-                                    <Avatar sx={{ bgcolor: selectedTicket.status === 'OPEN' ? '#fee2e2' : '#dcfce7', color: selectedTicket.status === 'OPEN' ? '#b91c1c' : '#15803d' }}><ReportProblem /></Avatar>
+                                    <Avatar sx={{ bgcolor: '#eff6ff', color: '#3b82f6' }}><ReportProblem /></Avatar>
                                     <Box>
-                                        <Stack direction="row" alignItems="center" spacing={2}><Typography variant="h5" fontWeight="800" color="#0f172a">Ticket #{selectedTicket.ticketId}</Typography><Chip label={selectedTicket.status} color={selectedTicket.status === 'OPEN' ? 'error' : 'success'} size="small" /></Stack>
+                                        <Stack direction="row" alignItems="center" spacing={2}><Typography variant="h5" fontWeight="800" color="#0f172a">Ticket #{selectedTicket.ticketId}</Typography><Chip label={selectedTicket.status} size="small" /></Stack>
                                         <Typography variant="body2" color="textSecondary">By {selectedTicket.createdBy?.fullName}</Typography>
                                     </Box>
                                 </Box>
@@ -280,16 +366,48 @@ const AdminDashboard = () => {
 
                             <DialogContent sx={{ p: 0, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, height: '100%' }}>
                                 <Box sx={{ flex: 1, p: 4, overflowY: 'auto', borderRight: '1px solid #e2e8f0' }}>
-                                    <Paper variant="outlined" sx={{ p: 3, mb: 4, borderRadius: 3, bgcolor: '#f8fafc' }}>
-                                        <Grid container spacing={3}>
-                                            <Grid item xs={6}><Typography variant="caption" fontWeight="bold" color="textSecondary">BRANCH</Typography><Typography variant="subtitle1" fontWeight="bold">{selectedTicket.branch?.branchName}</Typography></Grid>
-                                            <Grid item xs={6}><Typography variant="caption" fontWeight="bold" color="textSecondary">CATEGORY</Typography><Typography variant="subtitle1" fontWeight="bold">{selectedTicket.errorCategory?.categoryName}</Typography></Grid>
+                                    
+                                    <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 3 }}>
+                                        <Stack direction="row" alignItems="center" gap={1} mb={2}>
+                                            <Timeline color="primary" fontSize="small" />
+                                            <Typography variant="subtitle2" fontWeight="800" color="primary.main">PROJECT STATUS & FINANCIALS</Typography>
+                                        </Stack>
+                                        <Grid container spacing={2}>
+                                            <Grid size={{ xs: 6 }}>
+                                                <Typography variant="caption" color="textSecondary" fontWeight="bold">APPROVAL STATUS</Typography>
+                                                <Typography variant="body2" fontWeight="bold" sx={{ color: getApprovalDetails(selectedTicket.status).color }}>{getApprovalDetails(selectedTicket.status).text}</Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 6 }}>
+                                                <Typography variant="caption" color="textSecondary" fontWeight="bold">ESTIMATED COST</Typography>
+                                                <Typography variant="body2" fontWeight="bold" color="#0f172a">
+                                                    {selectedTicket.status === 'OPEN' 
+                                                        ? 'Pending Estimate' 
+                                                        : `Rs. ${(selectedTicket.estimatedCost || 0).toLocaleString()}`}
+                                                </Typography>
+                                            </Grid>
+                                            {/* ✅ NEW: SHOW REPAIR PLAN */}
+                                            {selectedTicket.repairDescription && (
+                                                <Grid size={{ xs: 12 }}>
+                                                    <Typography variant="caption" color="textSecondary" fontWeight="bold">REPAIR PLAN ({selectedTicket.repairSource || 'EXTERNAL'})</Typography>
+                                                    <Typography variant="body2" sx={{ fontStyle: 'italic', color: '#475569' }}>"{selectedTicket.repairDescription}"</Typography>
+                                                </Grid>
+                                            )}
+                                            <Grid size={{ xs: 6 }}><Typography variant="caption" color="textSecondary" fontWeight="bold">CREATED ON</Typography><Typography variant="body2">{new Date(selectedTicket.createdAt).toLocaleDateString()}</Typography></Grid>
+                                            <Grid size={{ xs: 6 }}><Typography variant="caption" color="textSecondary" fontWeight="bold">ASSIGNED TO</Typography><Typography variant="body2">{selectedTicket.assignedAdmin?.fullName || 'Unassigned'}</Typography></Grid>
                                         </Grid>
                                     </Paper>
+
                                     <Box mb={4}>
                                         <Typography variant="h6" fontWeight="bold" gutterBottom>{selectedTicket.subject}</Typography>
                                         <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{selectedTicket.description}</Typography>
                                     </Box>
+
+                                    {selectedTicket.asset && (
+                                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, display: 'flex', alignItems: 'center', gap: 2, borderLeft: '4px solid #3b82f6', mb: 3 }}>
+                                            <Avatar variant="rounded" sx={{ bgcolor: '#eff6ff', color: '#3b82f6' }}><Computer/></Avatar>
+                                            <Box><Typography variant="subtitle2" fontWeight="bold">{selectedTicket.asset.brand} {selectedTicket.asset.model}</Typography><Typography variant="caption" display="block">Tag: {selectedTicket.asset.assetCode}</Typography><Typography variant="caption" color="textSecondary">{selectedTicket.branch?.branchName}</Typography></Box>
+                                        </Paper>
+                                    )}
 
                                     {selectedTicket.images && selectedTicket.images.length > 0 && (
                                         <Box mb={4}>
@@ -304,36 +422,70 @@ const AdminDashboard = () => {
                                             </Stack>
                                         </Box>
                                     )}
-
-                                    {selectedTicket.asset && (
-                                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, display: 'flex', alignItems: 'center', gap: 2, borderLeft: '4px solid #3b82f6' }}>
-                                            <Avatar variant="rounded" sx={{ bgcolor: '#eff6ff', color: '#3b82f6' }}><Computer/></Avatar>
-                                            <Box><Typography variant="subtitle2" fontWeight="bold">{selectedTicket.asset.brand} {selectedTicket.asset.model}</Typography><Typography variant="caption">Tag: {selectedTicket.asset.assetCode}</Typography></Box>
-                                        </Paper>
-                                    )}
                                 </Box>
+                                
                                 <Box sx={{ width: { xs: '100%', md: '450px' }, display: 'flex', flexDirection: 'column', bgcolor: '#f8fafc' }}>
-                                    
-                                    {/* ✅ ADDED status={selectedTicket.status} to pass the lock condition */}
                                     <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}>
                                         <TicketComments ticketId={selectedTicket.ticketId} status={selectedTicket.status} />
                                     </Box>
 
                                     <Box sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: 'white' }}>
-                                        {selectedTicket.status === 'OPEN' ? (
-                                            <Button variant="contained" fullWidth size="large" onClick={() => handleStartTicket(selectedTicket.ticketId)} sx={{ borderRadius: 2, fontWeight: 'bold', background: 'linear-gradient(to right, #2563eb, #1d4ed8)' }}>Accept Ticket</Button>
-                                        ) : selectedTicket.status === 'IN_PROGRESS' ? (
+                                        
+                                        {selectedTicket.status === 'OPEN' && (
+                                            <Stack spacing={3}>
+                                                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8fafc' }}>
+                                                    <FormControl component="fieldset">
+                                                        <FormLabel component="legend" sx={{ fontWeight: 'bold', fontSize: '0.85rem', mb: 1 }}>REPAIR SOURCE</FormLabel>
+                                                        <RadioGroup row value={repairSource} onChange={handleSourceChange}>
+                                                            <FormControlLabel value="EXTERNAL" control={<Radio size="small" />} label={<Typography variant="body2">External Vendor</Typography>} />
+                                                            <FormControlLabel value="INTERNAL" control={<Radio size="small" />} label={<Typography variant="body2">Internal Stock</Typography>} />
+                                                        </RadioGroup>
+                                                    </FormControl>
+                                                </Paper>
+
+                                                <TextField label="Technical Repair Description" placeholder="E.g. Replacing Fuser Unit, Refilling Black Toner..." multiline rows={2} fullWidth size="small" value={repairDescription} onChange={(e) => setRepairDescription(e.target.value)} />
+
+                                                <TextField 
+                                                    label="Estimated Cost (Labor / Transport / Parts)" 
+                                                    type="number" 
+                                                    size="small" 
+                                                    fullWidth 
+                                                    value={repairCost} 
+                                                    onChange={(e) => setRepairCost(e.target.value)} 
+                                                    placeholder="0.00" 
+                                                    helperText={repairSource === 'INTERNAL' ? "Enter 0 if using only stock. Enter value if labor/transport costs apply." : "Enter total estimated vendor charges."} 
+                                                    InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }} 
+                                                />
+
+                                                <Button variant="contained" fullWidth size="large" onClick={handleSubmitEstimate} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Submit Plan & Request Approval</Button>
+                                            </Stack>
+                                        )}
+
+                                        {(selectedTicket.status.includes('PENDING')) && (
+                                            <Alert severity="warning" variant="outlined" icon={<PendingActions />} sx={{ borderRadius: 2 }}><strong>Approval Pending</strong><br/>Waiting for authorization.</Alert>
+                                        )}
+
+                                        {selectedTicket.status === 'APPROVED_FOR_REPAIR' && (
+                                            <Stack spacing={2}>
+                                                <Alert severity="success" variant="filled" sx={{ borderRadius: 2 }}>Estimate Approved. Ready for repair.</Alert>
+                                                <Button variant="contained" color="secondary" fullWidth size="large" onClick={handleStartWork} startIcon={<Engineering />} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Start Repair Work</Button>
+                                            </Stack>
+                                        )}
+
+                                        {selectedTicket.status === 'IN_PROGRESS' && (
                                             selectedTicket.assignedAdmin?.userId === myId ? (
                                                 <Stack spacing={2}>
-                                                    <Button variant="contained" color="success" fullWidth size="large" onClick={() => openResolutionPrompt('RESOLVE')} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Resolve Issue</Button>
-                                                    <Button variant="outlined" color="error" fullWidth onClick={() => openResolutionPrompt('DISPOSE')} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Dispose Asset</Button>
+                                                    <Button variant="contained" color="success" fullWidth size="large" onClick={() => openResolutionPrompt('RESOLVE')} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Complete & Resolve</Button>
+                                                    <Button variant="outlined" color="error" fullWidth onClick={() => openResolutionPrompt('DISPOSE')} sx={{ borderRadius: 2, fontWeight: 'bold' }}>Asset Unrepairable (Dispose)</Button>
                                                 </Stack>
                                             ) : (
-                                                <Alert severity="warning" variant="outlined" icon={<Lock />} sx={{ borderRadius: 2 }}>
-                                                    This ticket is currently being handled by <strong>{selectedTicket.assignedAdmin?.fullName}</strong>.
-                                                </Alert>
+                                                <Alert severity="info" variant="outlined" icon={<Lock />} sx={{ borderRadius: 2 }}>Ticket locked by <strong>{selectedTicket.assignedAdmin?.fullName}</strong>.</Alert>
                                             )
-                                        ) : <Button disabled fullWidth variant="outlined">Ticket Closed</Button>}
+                                        )}
+
+                                        {(selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'CLOSED') && (
+                                            <Button disabled fullWidth variant="outlined">Ticket Closed</Button>
+                                        )}
                                     </Box>
                                 </Box>
                             </DialogContent>
@@ -341,31 +493,82 @@ const AdminDashboard = () => {
                     )}
                 </Dialog>
 
-                {/* 6. ACTION DIALOG (Resolve/Dispose) */}
+                {/* 6. ACTION DIALOG (RESOLVE / DISPOSE) */}
                 <Dialog open={openActionDialog} onClose={() => setOpenActionDialog(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
                     <DialogTitle sx={{ bgcolor: actionType === 'DISPOSE' ? '#fee2e2' : '#f0fdf4', color: actionType === 'DISPOSE' ? '#b91c1c' : '#15803d', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         {actionType === 'DISPOSE' ? <DeleteForever /> : <CheckCircle />}
-                        {actionType === 'DISPOSE' ? 'Confirm Asset Disposal' : 'Complete Ticket Resolution'}
+                        {actionType === 'DISPOSE' ? 'Confirm Asset Disposal' : 'Finalize Repair'}
                     </DialogTitle>
                     <DialogContent sx={{ mt: 2 }}>
                         <Stack spacing={3}>
                             {actionType === 'DISPOSE' && (<Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}><strong>Warning:</strong> This will permanently mark the asset as <strong>DISPOSED</strong>.</Alert>)}
+                            
                             <Box>
-                                <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>Action Details</Typography>
-                                <TextField autoFocus placeholder={actionType === 'DISPOSE' ? "Explain why this asset cannot be repaired..." : "Explain exactly what was fixed..."} fullWidth multiline rows={4} value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} variant="outlined" sx={{ bgcolor: '#f8fafc' }} />
+                                <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>Resolution Details</Typography>
+                                <TextField autoFocus placeholder={actionType === 'DISPOSE' ? "Reason for disposal..." : "Describe the repair work done..."} fullWidth multiline rows={4} value={resolutionText} onChange={(e) => setResolutionText(e.target.value)} variant="outlined" sx={{ bgcolor: '#f8fafc' }} />
                             </Box>
+                            
                             {actionType === 'RESOLVE' && (
                                 <Box>
-                                    <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>Financial Details</Typography>
-                                    <TextField label="Total Repair Cost" fullWidth type="number" value={repairCost} onChange={(e) => setRepairCost(e.target.value)} placeholder="0.00" InputProps={{ startAdornment: (<InputAdornment position="start"><Typography fontWeight="bold" color="primary">Rs.</Typography></InputAdornment>), sx: { borderRadius: 2, bgcolor: '#f8fafc', fontWeight: 'bold' } }} helperText="Include parts, labor, and external service fees." />
+                                    <Typography variant="caption" fontWeight="bold" color="textSecondary" sx={{ mb: 1, display: 'block', textTransform: 'uppercase' }}>Final Cost & Billing</Typography>
+                                    <Stack spacing={2}>
+                                        <TextField 
+                                            label="Final Cost" 
+                                            fullWidth 
+                                            type="number" 
+                                            value={repairCost} 
+                                            onChange={(e) => setRepairCost(e.target.value)} 
+                                            placeholder="0.00" 
+                                            InputProps={{ 
+                                                startAdornment: (<InputAdornment position="start"><Typography fontWeight="bold" color="primary">Rs.</Typography></InputAdornment>), 
+                                                sx: { borderRadius: 2, bgcolor: '#f8fafc', fontWeight: 'bold' } 
+                                            }} 
+                                            helperText="Enter the actual final cost." 
+                                        />
+                                        
+                                        {/* COST VARIANCE ALERT */}
+                                        {isOverrun && (
+                                            <Fade in={true}>
+                                                <Alert severity="warning" icon={<WarningAmber />} sx={{ borderRadius: 2, border: '1px solid #fdba74' }}>
+                                                    <strong>Cost Overrun:</strong> Final cost exceeds the approved estimate. Please provide a justification.
+                                                </Alert>
+                                            </Fade>
+                                        )}
+
+                                        {/* VARIANCE REASON INPUT */}
+                                        {isOverrun && (
+                                            <TextField 
+                                                label="Reason for Cost Overrun" 
+                                                placeholder="E.g. Price increase, additional parts required..." 
+                                                fullWidth 
+                                                multiline 
+                                                rows={2}
+                                                required 
+                                                error={!varianceReason.trim()}
+                                                value={varianceReason} 
+                                                onChange={(e) => setVarianceReason(e.target.value)} 
+                                            />
+                                        )}
+
+                                        {/* Bill Upload Section */}
+                                        <Box display="flex" alignItems="center" gap={2}>
+                                            <Button variant="outlined" component="label" startIcon={<CloudUpload />}>
+                                                Upload Bill / Invoice
+                                                <input type="file" hidden accept="image/*" onChange={handleBillUpload} />
+                                            </Button>
+                                            {billFileName && (
+                                                <Chip label={billFileName} onDelete={() => { setBillImage(null); setBillFileName(""); }} />
+                                            )}
+                                        </Box>
+                                    </Stack>
                                 </Box>
                             )}
                         </Stack>
                     </DialogContent>
                     <DialogActions sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
                         <Button onClick={() => setOpenActionDialog(false)} sx={{ color: '#64748b', fontWeight: 'bold' }}>Cancel</Button>
-                        <Button onClick={submitResolution} variant="contained" size="large" color={actionType === 'DISPOSE' ? 'error' : 'success'} disabled={!resolutionText.trim()} sx={{ px: 4, fontWeight: '800', borderRadius: 2 }}>
-                            {actionType === 'DISPOSE' ? 'Confirm Disposal' : 'Submit & Close Ticket'}
+                        <Button onClick={submitFinalResolution} variant="contained" size="large" color={actionType === 'DISPOSE' ? 'error' : 'success'} disabled={!resolutionText.trim()} sx={{ px: 4, fontWeight: '800', borderRadius: 2 }}>
+                            {actionType === 'DISPOSE' ? 'Confirm Disposal' : 'Complete Ticket'}
                         </Button>
                     </DialogActions>
                 </Dialog>

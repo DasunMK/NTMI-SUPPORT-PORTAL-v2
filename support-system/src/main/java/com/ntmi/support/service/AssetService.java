@@ -8,10 +8,12 @@ import com.ntmi.support.repository.TicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class AssetService {
@@ -20,7 +22,7 @@ public class AssetService {
     private AssetRepository assetRepository;
 
     @Autowired
-    private TicketRepository ticketRepository; // ✅ Required for cost calculation
+    private TicketRepository ticketRepository;
 
     // --- 1. Asset Management (Frontend) ---
 
@@ -41,23 +43,19 @@ public class AssetService {
         return assetRepository.save(asset);
     }
 
-    // ✅ Helper: Calculates Total Repair Cost on the fly
+    // ✅ Helper: Calculates Total Repair Cost (Handles BigDecimal)
     private List<Asset> calculateCostsForAssets(List<Asset> assets) {
         for (Asset asset : assets) {
-            // Find all tickets for this asset
             List<Ticket> history = ticketRepository.findByAsset_AssetId(asset.getAssetId());
             
-            // Sum up the repair costs (safely handling nulls)
-            double totalCost = history.stream()
-                .filter(t -> t.getRepairCost() != null)
-                .mapToDouble(Ticket::getRepairCost)
-                .sum();
+            // ✅ FIX: Sum BigDecimal correctly
+            BigDecimal totalCostBD = history.stream()
+                .map(Ticket::getRepairCost)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
             
-            // Set the transient field
-            asset.setTotalRepairCost(totalCost);
-            
-            // Optional: Ensure repair count matches ticket history size
-            // asset.setRepairCount(history.size()); 
+            // Set the transient field (convert to double for frontend compatibility if needed)
+            asset.setTotalRepairCost(totalCostBD.doubleValue());
         }
         return assets;
     }
@@ -65,35 +63,53 @@ public class AssetService {
     // --- 2. Analytics & Reports ---
 
     public List<ReliabilityDTO> getReliabilityStats() {
-        // 1. Get raw data
-        List<Object[]> totalAssets = assetRepository.countTotalAssetsByModel();
-        List<Object[]> totalTickets = assetRepository.countTicketsByModel();
+        // Fetch all assets
+        List<Asset> allAssets = assetRepository.findAll();
+        Map<String, ReliabilityDTO> modelStats = new HashMap<>();
 
-        // 2. Map Ticket Counts for fast lookup
-        Map<String, Long> ticketMap = new HashMap<>();
-        for (Object[] row : totalTickets) {
-            ticketMap.put((String) row[0], (Long) row[1]);
+        for (Asset asset : allAssets) {
+            String model = asset.getModel(); // Group by Model Name
+
+            // Get or create DTO for this model
+            ReliabilityDTO dto = modelStats.getOrDefault(model, new ReliabilityDTO());
+            if (dto.getModelName() == null) {
+                dto.setModelName(model);
+                dto.setTotalUnits(0L);
+                dto.setTotalFailures(0L);
+                dto.setTotalRepairCost(0.0);
+            }
+
+            // 1. Increment Total Units
+            dto.setTotalUnits(dto.getTotalUnits() + 1);
+
+            // 2. Check Failures & Cost
+            List<Ticket> tickets = ticketRepository.findByAsset(asset);
+            if (!tickets.isEmpty()) {
+                dto.setTotalFailures(dto.getTotalFailures() + tickets.size());
+
+                BigDecimal cost = tickets.stream()
+                    .map(Ticket::getRepairCost)
+                    .filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                
+                dto.setTotalRepairCost(dto.getTotalRepairCost() + cost.doubleValue());
+            }
+
+            modelStats.put(model, dto);
         }
 
-        // 3. Combine and Calculate
-        List<ReliabilityDTO> stats = new ArrayList<>();
-        for (Object[] row : totalAssets) {
-            String model = (String) row[0];
-            Long totalUnits = (Long) row[1];
-            Long failures = ticketMap.getOrDefault(model, 0L);
-
-            // Calculate Rate (Avoid division by zero)
-            double rate = totalUnits > 0 ? ((double) failures / totalUnits) * 100 : 0.0;
-            
-            // Round to 1 decimal place
-            rate = Math.round(rate * 10.0) / 10.0;
-
-            stats.add(new ReliabilityDTO(model, totalUnits, failures, rate));
+        // 3. Finalize: Calculate Failure Rate %
+        List<ReliabilityDTO> results = new ArrayList<>(modelStats.values());
+        for (ReliabilityDTO dto : results) {
+            if (dto.getTotalUnits() > 0) {
+                double rate = ((double) dto.getTotalFailures() / dto.getTotalUnits()) * 100;
+                dto.setFailureRate(Math.round(rate * 10.0) / 10.0); // Round to 1 decimal
+            }
         }
-        
-        // Sort by highest failure rate
-        stats.sort((a, b) -> Double.compare(b.getFailureRate(), a.getFailureRate()));
-        
-        return stats;
+
+        // Sort by Failure Rate (Highest first)
+        results.sort((a, b) -> Double.compare(b.getFailureRate(), a.getFailureRate()));
+
+        return results;
     }
 }

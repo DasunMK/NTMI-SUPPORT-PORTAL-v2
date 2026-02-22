@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.ToString;
 import lombok.EqualsAndHashCode;
 
-import java.math.BigDecimal; // ✅ Required for precise financial data
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
@@ -19,6 +19,7 @@ public class RepairRecord {
     private Long id;
 
     // Link to the Asset being repaired
+    // ✅ We do NOT use 'unique = true' here, allowing one asset to have many repairs
     @ManyToOne
     @JoinColumn(name = "asset_id", nullable = false)
     @JsonIgnoreProperties({"repairRecords", "tickets", "branch"}) 
@@ -27,21 +28,22 @@ public class RepairRecord {
     private Asset asset;
 
     // Link to the Ticket that caused this repair
-    @OneToOne
+    // ✅ CHANGED from @OneToOne to @ManyToOne
+    // This allows one Ticket to generate multiple records (e.g. one for Estimate, one for Resolution)
+    @ManyToOne
     @JoinColumn(name = "ticket_id")
     @JsonIgnoreProperties({"asset", "branch", "images", "comments", "assignedAdmin", "createdBy"}) 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Ticket ticket;
 
-    // "Replaced Hard Drive", "Software Update", etc.
+    // "Replaced Hard Drive", "Software Update", "PLAN SUBMITTED", etc.
     @Column(nullable = false, length = 500)
     private String actionTaken; 
 
     private LocalDate repairDate;
 
-    // ✅ FIXED: Using BigDecimal ensures SQL Server maps this to DECIMAL(18,2)
-    // This avoids the "scale has no meaning for SQL floating point types" error.
+    // ✅ Using BigDecimal for precise currency handling
     @Column(precision = 18, scale = 2)
     private BigDecimal cost = BigDecimal.ZERO; 
 }

@@ -6,6 +6,8 @@ import com.ntmi.support.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,45 +31,39 @@ public class AuthController {
     @Autowired
     private JwtUtils jwtUtils;
 
-    // --- REGISTER ENDPOINT ---
-    @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody User user) {
-        try {
-            // 🛠️ FIX: Changed 'saveUser' to 'createUser' to match UserService
-            User savedUser = userService.createUser(user);
-            return ResponseEntity.ok("User registered successfully with ID: " + savedUser.getUserId());
-        } catch (RuntimeException e) {
-            // Catch "Username already exists" errors
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Error registering user: " + e.getMessage());
-        }
-    }
-
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
         String username = request.get("username");
         String password = request.get("password");
 
         try {
+            // 1. Authenticate credentials
+            // If user is inactive, Spring Security throws DisabledException here
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password)
             );
 
+            // 2. Set Security Context
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            
+            // 3. Generate Token
             String jwt = jwtUtils.generateToken(username);
 
+            // 4. Fetch User Details for Frontend Context
             Optional<User> userOp = userService.findByUsername(username);
             
             if (userOp.isPresent()) {
                 User user = userOp.get();
+                
                 Map<String, Object> response = new HashMap<>();
                 response.put("token", jwt);
                 response.put("userId", user.getUserId());
                 response.put("username", user.getUsername());
                 response.put("fullName", user.getFullName());
                 response.put("role", user.getRole().name());
+                response.put("email", user.getEmail());
                 
+                // Handle Branch assignment safely
                 if (user.getBranch() != null) {
                     response.put("branchName", user.getBranch().getBranchName());
                     response.put("branchId", user.getBranch().getBranchId());
@@ -79,8 +75,18 @@ public class AuthController {
             }
             return ResponseEntity.badRequest().body("User not found");
 
+        } catch (DisabledException e) {
+            // ✅ SPECIFIC ERROR: Account is disabled (active=0)
+            return ResponseEntity.status(403).body("Account is disabled. Please contact Administrator.");
+            
+        } catch (BadCredentialsException e) {
+            // ✅ SPECIFIC ERROR: Wrong Password or User doesn't exist
+            return ResponseEntity.status(401).body("Invalid Username or Password");
+            
         } catch (Exception e) {
-            return ResponseEntity.status(403).body("Login Failed: " + e.getMessage());
+            // Catch-all for other unexpected errors
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Internal Server Error: " + e.getMessage());
         }
     }
 }

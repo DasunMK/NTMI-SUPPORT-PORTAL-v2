@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.ToString;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal; // ✅ Import for Currency
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +37,31 @@ public class Ticket {
 
     // --- Timestamps ---
     private LocalDateTime createdAt;
-    private LocalDateTime resolvedAt; // ✅ Required for Analytics
+    private LocalDateTime resolvedAt; 
     private LocalDateTime closedAt;
+
+    // --- Financials & Approval Data ---
+    // ✅ Changed to BigDecimal for currency precision
+    @Column(precision = 10, scale = 2)
+    private BigDecimal estimatedCost; // Cost proposed by Admin (Step 2)
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal repairCost;    // Actual final cost (Step 5)
+
+    @Column(columnDefinition = "TEXT")
+    private String rejectionReason; 
+    
+    
+    // In Ticket.java
+
+    @Column(name = "repair_source")
+    private String repairSource; // "INTERNAL" or "EXTERNAL"
+
+    @Column(name = "repair_description", columnDefinition = "TEXT")
+    private String repairDescription;
+
+    @Column(name = "variance_reason", columnDefinition = "TEXT")
+    private String varianceReason; // For cost overruns// If rejected by Super Admin/Finance
 
     // --- Relationships ---
 
@@ -99,7 +123,4 @@ public class Ticket {
             this.createdAt = LocalDateTime.now();
         }
     }
-
-    
-    private Double repairCost;
 }

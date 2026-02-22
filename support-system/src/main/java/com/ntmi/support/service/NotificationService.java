@@ -50,6 +50,7 @@ public class NotificationService {
             System.out.println("✅ [DB] Saved Notification ID: " + n.getId() + " for " + recipient.getUsername());
 
             // 2. PUSH TO WEBSOCKET
+            // Note: Frontend must subscribe to /user/queue/notifications
             NotificationMsg wsMsg = new NotificationMsg(title, message);
             messagingTemplate.convertAndSendToUser(
                 recipient.getUsername(), 
@@ -64,7 +65,7 @@ public class NotificationService {
     }
 
     /**
-     * Helper: Send by Username (Updated to accept 'type')
+     * Helper: Send by Username
      */
     @Transactional
     public void sendPrivateNotification(String username, String title, String message, String type) {
@@ -76,13 +77,12 @@ public class NotificationService {
         }
     }
 
-    // ✅ Overload for backward compatibility (defaults to "INFO")
     public void sendPrivateNotification(String username, String title, String message) {
         sendPrivateNotification(username, title, message, "INFO");
     }
 
     /**
-     * Helper: Notify All Admins (Updated to accept 'type')
+     * Helper: Notify All Admins
      */
     @Transactional
     public void notifyAllAdmins(String title, String message, String type) {
@@ -98,8 +98,25 @@ public class NotificationService {
         }
     }
 
-    // ✅ Overload for backward compatibility (defaults to "INFO")
     public void notifyAllAdmins(String title, String message) {
         notifyAllAdmins(title, message, "INFO");
+    }
+
+    /**
+     * ✅ NEW METHOD: Notify by Specific Role
+     * Used by TicketController to alert SUPER_ADMIN or ACCOUNT_HEAD
+     */
+    @Transactional
+    public void notifyRole(Role role, String title, String message, String type) {
+        List<User> users = userRepository.findByRole(role);
+        
+        if (users.isEmpty()) {
+            System.out.println("⚠️ No users found with role " + role + " to notify.");
+            return;
+        }
+
+        for (User user : users) {
+            send(user, title, message, type);
+        }
     }
 }

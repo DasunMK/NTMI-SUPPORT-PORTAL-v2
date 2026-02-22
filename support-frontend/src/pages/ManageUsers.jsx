@@ -3,11 +3,11 @@ import {
     Container, Paper, Typography, Box, Button, Table, TableBody, TableCell, 
     TableContainer, TableHead, TableRow, Chip, IconButton, Dialog, 
     DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Fade,
-    InputAdornment, Stack, Divider, Avatar, Tooltip
+    InputAdornment, Stack, Avatar, Tooltip
 } from '@mui/material';
 import { 
     Add, Edit, Search, Download, FilterList, Security, Business, 
-    Person, Email, AdminPanelSettings, Block, CheckCircle, RestoreFromTrash
+    Person, AdminPanelSettings, Block, CheckCircle, RestoreFromTrash
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import jsPDF from 'jspdf';
@@ -32,6 +32,9 @@ const ManageUsers = () => {
         email: '', role: 'BRANCH_USER', branch: ''
     });
     const [errors, setErrors] = useState({});
+
+    // Get Current User Role for Permission Logic
+    const currentUserRole = localStorage.getItem('role');
 
     const fetchData = async () => {
         try {
@@ -64,6 +67,30 @@ const ManageUsers = () => {
         if (branchFilter !== 'All') result = result.filter(u => u.branch && u.branch.branchName === branchFilter);
         setFilteredUsers(result);
     }, [users, searchQuery, roleFilter, branchFilter]);
+
+    // Dynamic Role Options based on who is logged in
+    const getRoleOptions = () => {
+        let options = [
+            { value: "BRANCH_USER", label: "Branch User" },
+            { value: "ADMIN", label: "Admin (IT Support)" }
+        ];
+
+        // Only SUPER_ADMIN can create high-level roles
+        if (currentUserRole === 'SUPER_ADMIN') {
+            options.push({ value: "SUPER_ADMIN", label: "Super Admin (Technical Head)" });
+            options.push({ value: "ACCOUNT_HEAD", label: "Account Head (Finance)" });
+        }
+
+        return options;
+    };
+
+    // Helper for Avatar Colors
+    const getRoleColor = (role) => {
+        if (role === 'SUPER_ADMIN') return '#ca3838'; // Indigo
+        if (role === 'ACCOUNT_HEAD') return '#12cf21'; // Emerald Green
+        if (role === 'ADMIN') return '#1d2ae1'; // Red
+        return '#3bf6ae'; // Blue
+    };
 
     const generatePDF = () => {
         const doc = new jsPDF();
@@ -121,8 +148,13 @@ const ManageUsers = () => {
         if (!validate()) return;
         try {
             const payload = { ...formData };
-            if (payload.role === 'ADMIN') payload.branch = null;
-            else payload.branch = payload.branch ? { branchId: payload.branch } : null;
+            // Roles without branches
+            if (['ADMIN', 'SUPER_ADMIN', 'ACCOUNT_HEAD'].includes(payload.role)) {
+                payload.branch = null;
+            } else {
+                // Branch Users need a branch object
+                payload.branch = payload.branch ? { branchId: payload.branch } : null;
+            }
 
             if (isEdit && !payload.password) delete payload.password;
 
@@ -136,25 +168,25 @@ const ManageUsers = () => {
             setOpen(false);
             fetchData();
         } catch (error) {
-            toast.error(error.response?.data || "Operation Failed");
+            // Handling specific backend error messages (e.g., security violations)
+            const msg = error.response?.data?.message || error.response?.data || "Operation Failed";
+            toast.error(typeof msg === 'string' ? msg : "Operation Failed");
         }
     };
 
     const handleToggleStatus = async (user) => {
         if (user.active) {
-            if(!window.confirm("Are you sure you want to DEACTIVATE this user? They will lose access immediately.")) return;
+            if(!window.confirm("Are you sure you want to DEACTIVATE this user?")) return;
             try {
-                // Calls DELETE endpoint which sets active=false (Soft Delete)
                 await api.delete(`/users/${user.userId}`);
                 toast.success("User deactivated");
                 fetchData();
-            } catch (error) { toast.error("Deactivation failed"); }
+            } catch (error) { toast.error(error.response?.data?.message || "Deactivation failed"); }
         } else {
             if(!window.confirm("Do you want to REACTIVATE this account?")) return;
             try {
-                // Calls PUT endpoint which sets active=true
                 await api.put(`/users/${user.userId}/activate`);
-                toast.success("User account restored");
+                toast.success("User restored");
                 fetchData();
             } catch (error) { toast.error("Reactivation failed"); }
         }
@@ -201,6 +233,9 @@ const ManageUsers = () => {
                                 <FilterList color="action" />
                                 <TextField select size="small" label="Role" sx={{ minWidth: 150 }} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
                                     <MenuItem value="All">All Roles</MenuItem>
+                                    {/* ✅ UPDATED: Added new roles to filter */}
+                                    <MenuItem value="SUPER_ADMIN">Super Admin</MenuItem>
+                                    <MenuItem value="ACCOUNT_HEAD">Account Head</MenuItem>
                                     <MenuItem value="ADMIN">Admin</MenuItem>
                                     <MenuItem value="BRANCH_USER">Branch User</MenuItem>
                                 </TextField>
@@ -230,7 +265,8 @@ const ManageUsers = () => {
                                 <TableRow key={u.userId} hover sx={{ opacity: u.active ? 1 : 0.6 }}>
                                     <TableCell>
                                         <Box display="flex" alignItems="center" gap={2}>
-                                            <Avatar sx={{ bgcolor: u.role === 'ADMIN' ? '#e11d48' : '#3b82f6', width: 40, height: 40 }}>{u.fullName.charAt(0)}</Avatar>
+                                            {/* ✅ UPDATED: Dynamic Avatar Color */}
+                                            <Avatar sx={{ bgcolor: getRoleColor(u.role), width: 40, height: 40 }}>{u.fullName.charAt(0)}</Avatar>
                                             <Box>
                                                 <Typography variant="body2" fontWeight="bold">{u.fullName}</Typography>
                                                 <Typography variant="caption" color="textSecondary">{u.email}</Typography>
@@ -238,7 +274,12 @@ const ManageUsers = () => {
                                         </Box>
                                     </TableCell>
                                     <TableCell>
-                                        <Chip icon={u.role === 'ADMIN' ? <AdminPanelSettings sx={{ fontSize: '16px !important' }} /> : <Security sx={{ fontSize: '16px !important' }} />} label={u.role === 'BRANCH_USER' ? 'Branch User' : 'Admin'} color={u.role === 'ADMIN' ? 'error' : 'primary'} size="small" variant="outlined" sx={{ fontWeight: 'bold' }} />
+                                        <Chip 
+                                            icon={u.role === 'ADMIN' ? <AdminPanelSettings sx={{ fontSize: '16px !important' }} /> : <Security sx={{ fontSize: '16px !important' }} />} 
+                                            label={u.role.replace('_', ' ')} 
+                                            color={u.role === 'ADMIN' ? 'error' : 'primary'} 
+                                            size="small" variant="outlined" sx={{ fontWeight: 'bold' }} 
+                                        />
                                     </TableCell>
                                     <TableCell>
                                         <Chip 
@@ -280,7 +321,6 @@ const ManageUsers = () => {
 
                 {/* Dialog */}
                 <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                    {/* ✅ FIXED: Removed inner Typography to avoid <h2><h6> nesting error */}
                     <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 'bold' }}>
                         {isEdit ? 'Update User' : 'Add New User'}
                     </DialogTitle>
@@ -296,10 +336,18 @@ const ManageUsers = () => {
                              </Box>
                              <Box display="flex" gap={2}>
                                 <TextField select label="Role" fullWidth value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})}>
-                                    <MenuItem value="BRANCH_USER">Branch User</MenuItem>
-                                    <MenuItem value="ADMIN">Admin</MenuItem>
+                                    {getRoleOptions().map((option) => (
+                                        <MenuItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </MenuItem>
+                                    ))}
                                 </TextField>
-                                <TextField select label="Branch" fullWidth value={formData.branch} onChange={(e) => setFormData({...formData, branch: e.target.value})} error={!!errors.branch} helperText={errors.branch} disabled={formData.role === 'ADMIN'}>
+                                <TextField 
+                                    select label="Branch" fullWidth 
+                                    value={formData.branch} onChange={(e) => setFormData({...formData, branch: e.target.value})} 
+                                    error={!!errors.branch} helperText={errors.branch} 
+                                    disabled={['ADMIN', 'SUPER_ADMIN', 'ACCOUNT_HEAD'].includes(formData.role)}
+                                >
                                     <MenuItem value="">Select</MenuItem>
                                     {branches.map((b) => <MenuItem key={b.branchId} value={b.branchId}>{b.branchName}</MenuItem>)}
                                 </TextField>

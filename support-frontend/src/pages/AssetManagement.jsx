@@ -136,9 +136,17 @@ const AssetManagement = () => {
         finally { setLoadingHistory(false); }
     };
 
-    const handleViewDetails = (asset) => {
+    // ✅ FIXED: Fetch history automatically when opening details so we can calculate the cost
+    const handleViewDetails = async (asset) => {
         setCurrentAsset(asset);
+        setRepairHistory([]); // Clear previous history
         setDetailsOpen(true);
+        try {
+            const res = await api.get(`/assets/${asset.assetId}/history`);
+            setRepairHistory(res.data);
+        } catch (error) {
+            console.error("Could not fetch history for cost calculation");
+        }
     };
 
     const getTotalRepairCost = () => {
@@ -403,7 +411,6 @@ const AssetManagement = () => {
 
             {/* ASSET DETAILS DIALOG */}
             <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                {/* ✅ FIXED: Removed inner Typography to avoid <h2><h6> nesting error */}
                 <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     Asset Profile
                     <IconButton onClick={() => setDetailsOpen(false)} sx={{ color: 'white' }}><Close /></IconButton>
@@ -418,13 +425,19 @@ const AssetManagement = () => {
                                     <Typography variant="body2" color="textSecondary">{currentAsset.brand} {currentAsset.model}</Typography>
                                 </Box>
                             </Stack>
-                            {/* ✅ FIXED: MUI v6 Grid Syntax */}
                             <Grid container spacing={3}>
                                 <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">SERIAL NO</Typography><Typography variant="body1" fontWeight="700">{currentAsset.serialNumber}</Typography></Grid>
                                 <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">BRANCH</Typography><Typography variant="body1" fontWeight="700">{currentAsset.branch?.branchName}</Typography></Grid>
                                 <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">PURCHASE DATE</Typography><Typography variant="body1" fontWeight="700">{currentAsset.purchasedDate || 'N/A'}</Typography></Grid>
                                 <Grid size={{ xs: 6 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">REPAIR COUNT</Typography><Typography variant="body1" fontWeight="700">{currentAsset.repairCount || 0} repairs</Typography></Grid>
-                                <Grid size={{ xs: 12 }}><Typography variant="caption" fontWeight="bold" color="textSecondary">TOTAL REPAIR COST</Typography><Typography variant="h6" fontWeight="800" color="#7c3aed">Rs. {(currentAsset.totalRepairCost || 0).toLocaleString()}</Typography></Grid>
+                                
+                                {/* ✅ FIXED: Calculated dynamically using the fetched history data */}
+                                <Grid size={{ xs: 12 }}>
+                                    <Typography variant="caption" fontWeight="bold" color="textSecondary">TOTAL REPAIR COST</Typography>
+                                    <Typography variant="h6" fontWeight="800" color="#7c3aed">
+                                        Rs. {getTotalRepairCost().toLocaleString()}
+                                    </Typography>
+                                </Grid>
                             </Grid>
                         </Box>
                     )}
@@ -439,7 +452,6 @@ const AssetManagement = () => {
 
             {/* REGISTER / EDIT DIALOG */}
             <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                {/* ✅ FIXED: Removed inner Typography to avoid <h2><h6> nesting error */}
                 <DialogTitle sx={{ bgcolor: '#0f172a', color: 'white', fontWeight: 'bold' }}>
                     {currentAsset ? `Edit Asset` : "Register New Asset"}
                 </DialogTitle>
@@ -489,7 +501,6 @@ const AssetManagement = () => {
 
             {/* MAINTENANCE LOG DIALOG */}
             <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-                {/* ✅ FIXED: Removed variant="h6" from Typography to avoid nesting error */}
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#f1f5f9' }}>
                     <Box display="flex" alignItems="center" gap={1.5}>
                         <History color="primary"/>

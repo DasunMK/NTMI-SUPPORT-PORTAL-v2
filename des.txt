@@ -1,0 +1,96 @@
+Scenario 1: The "Free Fix" (Pure Internal Stock)
+Use Case: You replace a toner cartridge from your existing office supply cupboard.
+
+1. Starting the Ticket (Admin Action):
+
+Repair Source: Selects Internal Stock.
+
+Repair Description: "Replacing HP 85A Toner from supply."
+
+Estimated Cost: Enters 0.00.
+
+Result: The system sees Cost = 0.
+
+2. The Workflow:
+
+Super Admin: Receives alert. Sees it is a "Stock Usage" request. Clicks Approve.
+
+System Logic: Because Cost is 0, the system SKIPS the Finance Head.
+
+Status: Jumps immediately to APPROVED_FOR_REPAIR.
+
+3. Resolving the Ticket (Admin Action):
+
+Admin: Clicks "Start Repair" -> Fixes the printer -> Clicks "Resolve".
+
+Resolution Notes: "Installed new toner. Print test passed."
+
+Final Cost: Enters 0.00.
+
+Outcome: Ticket is closed. No financial transaction is recorded, but inventory usage is logged in the history.
+
+Scenario 2: The "Hybrid" (Internal Part + External Cost)
+Use Case: You have the hard drive in stock, but you need to pay a technician Rs. 1,500 to install it because it requires soldering.
+
+1. Starting the Ticket (Admin Action):
+
+Repair Source: Selects Internal Stock (because the main part is internal).
+
+Repair Description: "Replacing Motherboard Capacitor (Part in stock). External soldering required."
+
+Estimated Cost: Enters 1,500.00 (Labor charge).
+
+Result: The system sees Cost > 0.
+
+2. The Workflow:
+
+Super Admin: Approves the technical necessity.
+
+System Logic: Because Cost > 0, the system SENDS it to the Account Head.
+
+Account Head: Sees a request for Rs. 1,500. Clicks Authorize.
+
+Status: Moves to APPROVED_FOR_REPAIR.
+
+3. Resolving the Ticket (Admin Action):
+
+Admin: Clicks "Start Repair" -> Technician does the work -> Clicks "Resolve".
+
+Resolution Notes: "Soldering completed by Technician Kamal."
+
+Final Cost: Enters 1,500.00 (or 1,450.00 if it was cheaper).
+
+Outcome: Ticket is closed. Financial report shows Rs. 1,500 expense.
+
+Scenario 3: The "Full Purchase" (External Vendor)
+Use Case: A monitor is broken and you need to buy a brand new one from a shop.
+
+1. Starting the Ticket (Admin Action):
+
+Repair Source: Selects External Vendor.
+
+Repair Description: "Monitor display cracked. Needs replacement."
+
+Estimated Cost: Enters 25,000.00.
+
+Result: The system sees Cost > 0.
+
+2. The Workflow:
+
+Super Admin: Approves the replacement.
+
+System Logic: Because Cost > 0, the system SENDS it to the Account Head.
+
+Account Head: Reviews budget. Clicks Authorize.
+
+Status: Moves to APPROVED_FOR_REPAIR.
+
+3. Resolving the Ticket (Admin Action):
+
+Admin: Clicks "Start Repair" -> Buys monitor -> Installs it -> Clicks "Resolve".
+
+Resolution Notes: "Purchased Dell 24-inch monitor from Unity Plaza. Invoice #9988 attached."
+
+Final Cost: Enters 24,500.00 (Actual bill amount).
+
+Outcome: Ticket is closed. Financial report shows Rs. 24,500 expense.

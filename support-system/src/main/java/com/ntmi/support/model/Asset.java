@@ -35,13 +35,13 @@ public class Asset {
     @Column(name = "warranty_expiry")
     private LocalDate warrantyExpiry;
 
-    // ✅ NEW: Purchase Cost (Needed for Analytics)
+    // ✅ Purchase Cost
     @Column(name = "purchase_cost")
     private Double purchaseCost;
 
-    // ✅ Repair Tracking (Synced with SQL)
+    // ✅ FIX: Changed 'int' to 'Integer' to allow NULL values from DB without crashing
     @Column(name = "repair_count")
-    private int repairCount = 0;
+    private Integer repairCount;
     
     private String status; 
 
@@ -60,11 +60,11 @@ public class Asset {
     @EqualsAndHashCode.Exclude
     private List<RepairRecord> repairRecords;
 
-    // ✅ NEW: Calculated Field for Frontend (Not in DB)
-    // This holds the sum of all repair costs for this asset
+    // ✅ Calculated Field for Frontend (Not stored in DB)
     @Transient 
     private Double totalRepairCost;
 
+    // Helper to ensure frontend doesn't get null for transient field
     public Double getTotalRepairCost() {
         return totalRepairCost == null ? 0.0 : totalRepairCost;
     }

@@ -12,7 +12,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 
 @Entity
@@ -27,6 +26,7 @@ public class User implements UserDetails {
     @Column(unique = true, nullable = false)
     private String username;
 
+    // ✅ Prevents password from being sent back in JSON responses (Write Only)
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String password;
@@ -39,8 +39,8 @@ public class User implements UserDetails {
 
     private String phone;
 
-    // ✅ FIX APPLIED: Added 'columnDefinition' to handle existing data in DB.
-    // "BIT DEFAULT 1" sets this to TRUE for all current users, preventing the SQL error.
+    // ✅ CRITICAL FIX: "BIT DEFAULT 1" handles existing data in DB.
+    // Ensures all current users are set to TRUE automatically.
     @Column(nullable = false, columnDefinition = "BIT DEFAULT 1")
     private boolean active = true; 
 
@@ -52,13 +52,15 @@ public class User implements UserDetails {
 
     @ManyToOne
     @JoinColumn(name = "branch_id")
+    // Prevents infinite JSON recursion when fetching Branch -> Users
     @JsonIgnoreProperties({"users", "tickets", "assets"}) 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Branch branch;
 
+    // One User creates Many Tickets
     @OneToMany(mappedBy = "createdBy")
-    @JsonIgnore
+    @JsonIgnore // Prevents recursion: Ticket -> User -> Ticket
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<Ticket> tickets;
@@ -68,8 +70,9 @@ public class User implements UserDetails {
     @Override
     @JsonIgnore
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        if (this.role == null) return Collections.emptyList();
-        return List.of(new SimpleGrantedAuthority(role.name()));
+        if (this.role == null) return List.of();
+        // ✅ FIXED: Removed "ROLE_" prefix to match @PreAuthorize("hasAuthority('ADMIN')")
+        return List.of(new SimpleGrantedAuthority(this.role.name()));
     }
 
     @Override
@@ -78,7 +81,7 @@ public class User implements UserDetails {
 
     @Override
     @JsonIgnore
-    public boolean isAccountNonLocked() { return this.active; } // ✅ Lock account if inactive
+    public boolean isAccountNonLocked() { return this.active; } // Lock account if inactive
 
     @Override
     @JsonIgnore
@@ -86,5 +89,5 @@ public class User implements UserDetails {
 
     @Override
     @JsonIgnore
-    public boolean isEnabled() { return this.active; } // ✅ Disable account if inactive
+    public boolean isEnabled() { return this.active; } // Disable login if inactive
 }

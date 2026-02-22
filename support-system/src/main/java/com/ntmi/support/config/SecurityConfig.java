@@ -1,6 +1,7 @@
 package com.ntmi.support.config;
 
-import com.ntmi.support.filter.JwtAuthTokenFilter;
+import com.ntmi.support.filter.JwtAuthTokenFilter; // Ensure this matches your actual file name
+import com.ntmi.support.security.AuthEntryPointJwt;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,35 +27,47 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthTokenFilter jwtAuthTokenFilter;
 
+    @Autowired
+    private AuthEntryPointJwt unauthorizedHandler;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(exception -> exception
+                    .authenticationEntryPoint(unauthorizedHandler) // Handles 401 errors as JSON
+            )
             .authorizeHttpRequests(auth -> auth
-                // 1. PUBLIC ACCESS
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/master-data/**").permitAll()
+                // 1. PUBLIC ACCESS (No Login Required)
+                .requestMatchers("/api/auth/**").permitAll() // Login/Register
                 .requestMatchers("/error").permitAll()
-                .requestMatchers("/api/notifications/**").permitAll()
-                .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/ws/**").permitAll() // WebSockets
+                .requestMatchers("/uploads/**").permitAll() // Public asset images (if any)
                 
-                // 2. PROFILE & SELF SERVICE (✅ FIX: Allow any logged-in user)
-                .requestMatchers(HttpMethod.GET, "/api/users/{id}").authenticated()
-                .requestMatchers(HttpMethod.PUT, "/api/users/{id}/password").authenticated()
+                // 2. MASTER DATA (Branches, Categories)
+                // If you want dropdowns to load on the Login page, change .authenticated() to .permitAll()
+                .requestMatchers("/api/master-data/**").authenticated() 
+                .requestMatchers("/api/branches/**").authenticated()
 
-                // 3. ADMIN RESTRICTIONS
-                // Only Admin can see the full user list or create/delete users
-                .requestMatchers("/api/users/**").hasAuthority("ADMIN") 
-                .requestMatchers("/api/dashboard/admin").hasAuthority("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/tickets").hasAuthority("ADMIN") // 🛑 This was blocking Branch Users
+                // 3. USER MANAGEMENT
+                .requestMatchers("/api/users/**").authenticated()
 
-                // 4. SHARED / BRANCH ACCESS
-                .requestMatchers(HttpMethod.POST, "/api/tickets").authenticated()
-                .requestMatchers(HttpMethod.GET, "/api/tickets/branch/**").authenticated()
-                .requestMatchers(HttpMethod.PUT, "/api/tickets/**").authenticated() // Allow cancel/update
+                // 4. TICKETS & DASHBOARDS
+                .requestMatchers("/api/tickets/**").authenticated()
+                .requestMatchers("/api/dashboard/**").authenticated()
 
+                // 5. ASSET MANAGEMENT
+                .requestMatchers("/api/assets/**").authenticated()
+
+                // 6. APPROVAL WORKFLOW
+                .requestMatchers("/api/approvals/**").authenticated()
+                
+                // 7. NOTIFICATIONS
+                .requestMatchers("/api/notifications/**").authenticated()
+
+                // Default: Block anything else not authenticated
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthTokenFilter, UsernamePasswordAuthenticationFilter.class);
@@ -70,8 +83,8 @@ public class SecurityConfig {
     @Bean
     public UrlBasedCorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedOriginPatterns(List.of("*")); 
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         

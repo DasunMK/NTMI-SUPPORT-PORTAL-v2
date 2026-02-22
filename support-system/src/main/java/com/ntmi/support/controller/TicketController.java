@@ -1,12 +1,12 @@
 package com.ntmi.support.controller;
 
-import com.ntmi.support.dto.ReliabilityDTO;
 import com.ntmi.support.dto.TicketDTO;
 import com.ntmi.support.model.*;
 import com.ntmi.support.repository.*;
 import com.ntmi.support.service.AssetService;
 import com.ntmi.support.service.NotificationService;
 import com.ntmi.support.service.TicketService;
+import com.ntmi.support.dto.ReliabilityDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,18 +30,16 @@ public class TicketController {
     @Autowired private TicketService ticketService;
     @Autowired private UserRepository userRepository;
     @Autowired private NotificationService notificationService;
-    @Autowired private AssetService assetService; // ✅ Added to fetch Failure Stats
+    @Autowired private AssetService assetService;
 
     @Autowired private TicketRepository ticketRepository;
     @Autowired private AssetRepository assetRepository;
     @Autowired private ErrorCategoryRepository categoryRepository;
     @Autowired private ErrorTypeRepository typeRepository;
     @Autowired private RepairRecordRepository repairRecordRepository;
-    
-    // ✅ Inject TicketImageRepository
-    @Autowired private TicketImageRepository ticketImageRepository; 
+    @Autowired private TicketImageRepository ticketImageRepository;
 
-    // --- SHARED ACTIONS ---
+    // --- STEP 1: BRANCH USER CREATES TICKET ---
     @PostMapping
     public ResponseEntity<?> createTicket(@RequestBody TicketDTO dto, Authentication auth) {
         try {
@@ -61,7 +59,7 @@ public class TicketController {
                     .orElseThrow(() -> new RuntimeException("Category not found"));
             ErrorType type = typeRepository.findById(dto.getTypeId())
                     .orElseThrow(() -> new RuntimeException("Error Type not found"));
-            
+
             ticket.setErrorCategory(category);
             ticket.setErrorType(type);
             ticket.setSubject(category.getCategoryName() + " - " + type.getTypeName());
@@ -76,29 +74,36 @@ public class TicketController {
                 ticket.setBranch(user.getBranch());
             }
 
-            // 1. Save Ticket
             Ticket savedTicket = ticketRepository.save(ticket);
 
-            // 2. Save Images
+            // Handle Images
             if (dto.getImages() != null && !dto.getImages().isEmpty()) {
                 for (String base64Image : dto.getImages()) {
                     if (base64Image != null && !base64Image.isEmpty()) {
-                        TicketImage image = new TicketImage();
-                        image.setBase64Data(base64Image);
-                        image.setTicket(savedTicket);
-                        ticketImageRepository.save(image);
+                        try {
+                            TicketImage image = new TicketImage();
+                            image.setBase64Data(base64Image);
+                            image.setTicket(savedTicket);
+                            ticketImageRepository.save(image);
+                        } catch (Exception e) {
+                            System.err.println("Failed to save one of the images: " + e.getMessage());
+                        }
                     }
                 }
             }
 
-            // 3. Send Notification
+            // Notify Admins (Safe Wrapper)
             try {
-                notificationService.notifyAllAdmins(
-                    "New Ticket #" + savedTicket.getTicketId(),
-                    "New issue raised by " + user.getFullName() + " (" + savedTicket.getBranch().getBranchName() + ")",
-                    "INFO"
-                );
-            } catch (Exception e) { System.err.println("⚠️ Notification Error: " + e.getMessage()); }
+                if (savedTicket.getBranch() != null && user.getFullName() != null) {
+                    notificationService.notifyAllAdmins(
+                        "New Ticket #" + savedTicket.getTicketId(),
+                        "New issue raised by " + user.getFullName() + " (" + savedTicket.getBranch().getBranchName() + ")",
+                        "INFO"
+                    );
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ Notification Error: " + e.getMessage());
+            }
 
             return ResponseEntity.ok(savedTicket);
 
@@ -108,7 +113,210 @@ public class TicketController {
         }
     }
 
-    // --- PROFILE ACTIONS ---
+    // --- STEP 2: ADMIN ACCEPTS & ESTIMATES (Starts Approval Flow) ---
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @PutMapping("/{id}/estimate")
+    public ResponseEntity<?> submitEstimate(@PathVariable Long id, @RequestBody Map<String, Object> payload, Authentication auth) {
+        Ticket ticket = ticketRepository.findById(id).orElseThrow(() -> new RuntimeException("Ticket not found"));
+        User admin = userRepository.findByUsername(auth.getName()).orElseThrow(() -> new RuntimeException("Admin not found"));
+
+        // 1. Assign Admin
+        ticket.setAssignedAdmin(admin);
+
+        // 2. Capture Logic Fields
+        String source = (String) payload.getOrDefault("repairSource", "EXTERNAL");
+        String description = (String) payload.getOrDefault("repairDescription", "General Repair");
+
+        // 3. Capture Cost
+        BigDecimal estimatedCost = BigDecimal.ZERO;
+        if (payload.containsKey("estimatedCost") && payload.get("estimatedCost") != null) {
+            try {
+                estimatedCost = new BigDecimal(payload.get("estimatedCost").toString());
+            } catch (Exception e) {
+                System.err.println("Invalid cost format");
+            }
+        }
+
+        // Save Repair Plan Details
+        ticket.setRepairSource(source);
+        ticket.setRepairDescription(description);
+        ticket.setEstimatedCost(estimatedCost);
+
+        // Create Preliminary Record
+        String logMsg = "PLAN SUBMITTED (" + source + "): " + description + " | Est: " + estimatedCost;
+        if (ticket.getAsset() != null) {
+            createRepairRecord(ticket.getAsset(), ticket, logMsg, estimatedCost);
+        }
+
+        // Trigger Approval Workflow
+        ticket.setStatus(TicketStatus.PENDING_SUPER_ADMIN);
+        ticketRepository.save(ticket);
+
+        // Safe Notification
+        try {
+            notificationService.notifyRole(Role.SUPER_ADMIN, "Approval Required",
+                "Ticket #" + id + " estimate submitted: Rs." + estimatedCost, "WARNING");
+        } catch (Exception e) {
+            System.err.println("⚠️ Notification failed: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(ticket);
+    }
+
+    // --- STEP 5a: ADMIN STARTS REPAIR (After Approval) ---
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @PutMapping("/{id}/start-work")
+    public ResponseEntity<?> startRepairWork(@PathVariable Long id) {
+        Ticket ticket = ticketRepository.findById(id).orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+        if (ticket.getStatus() != TicketStatus.APPROVED_FOR_REPAIR) {
+            return ResponseEntity.badRequest().body("Ticket is not approved for repair yet.");
+        }
+
+        ticket.setStatus(TicketStatus.IN_PROGRESS);
+        ticketRepository.save(ticket);
+
+        if (ticket.getAsset() != null) {
+            Asset asset = ticket.getAsset();
+            asset.setStatus("REPAIR");
+            assetRepository.save(asset);
+        }
+
+        // Safe Notification
+        try {
+            if (ticket.getCreatedBy() != null) {
+                notificationService.send(ticket.getCreatedBy(), "Repair Started", "Admin has started working on your ticket.", "INFO");
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Notification failed: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(ticket);
+    }
+
+    // --- STEP 5b: ADMIN RESOLVES (Final Cost & Action) ---
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @PutMapping("/{id}/resolve-final")
+    public ResponseEntity<?> resolveFinal(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        try {
+            Ticket ticket = ticketRepository.findById(id).orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+            String resolution = (String) payload.get("resolution");
+            // Prevent null resolution text
+            if (resolution == null || resolution.trim().isEmpty()) {
+                resolution = "No details provided";
+            }
+
+            boolean isDisposeRequest = "true".equals(String.valueOf(payload.get("disposeAsset")));
+            String varianceReason = (String) payload.get("varianceReason");
+
+            BigDecimal finalCost = BigDecimal.ZERO;
+            if (payload.containsKey("finalCost") && payload.get("finalCost") != null) {
+                try {
+                    finalCost = new BigDecimal(payload.get("finalCost").toString());
+                } catch (Exception e) {
+                    System.err.println("Invalid cost format");
+                }
+            }
+
+            // Finalize Ticket
+            ticket.setStatus(TicketStatus.RESOLVED);
+            ticket.setResolvedAt(LocalDateTime.now());
+            ticket.setRepairCost(finalCost);
+            ticket.setVarianceReason(varianceReason);
+            ticketRepository.save(ticket);
+
+            // Save Bill Image
+            if (payload.containsKey("billImage") && payload.get("billImage") != null) {
+                String base64Image = (String) payload.get("billImage");
+                if (base64Image != null && !base64Image.isEmpty()) {
+                    try {
+                        TicketImage bill = new TicketImage();
+                        bill.setBase64Data(base64Image);
+                        bill.setTicket(ticket);
+                        ticketImageRepository.save(bill);
+                    } catch (Exception e) {
+                        System.err.println("Failed to save bill image: " + e.getMessage());
+                    }
+                }
+            }
+
+            // Update Asset & Create Final Record
+            if (ticket.getAsset() != null) {
+                Asset asset = ticket.getAsset();
+                if (isDisposeRequest) {
+                    asset.setStatus("DISPOSED");
+                    createRepairRecord(asset, ticket, "DISPOSED: " + resolution, finalCost);
+                } else {
+                    asset.setStatus("ACTIVE");
+                    
+                    // ✅ FIX: Handle Integer (Wrapper) safely to prevent NullPointerException
+                    Integer currentCount = asset.getRepairCount();
+                    if (currentCount == null) {
+                        currentCount = 0;
+                    }
+                    asset.setRepairCount(currentCount + 1);
+                    
+                    createRepairRecord(asset, ticket, "RESOLVED: " + resolution, finalCost);
+                }
+                assetRepository.save(asset);
+            }
+
+            // Safe Notification
+            try {
+                if (ticket.getCreatedBy() != null) {
+                    notificationService.send(ticket.getCreatedBy(), "Ticket Resolved", "Repair completed.", "SUCCESS");
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ Notification failed for resolved ticket: " + e.getMessage());
+            }
+
+            return ResponseEntity.ok(ticket);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body("Error resolving ticket: " + e.getMessage());
+        }
+    }
+
+    // --- NEW: CANCEL TICKET ENDPOINT ---
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<?> cancelTicket(@PathVariable Long id, Authentication auth) {
+        try {
+            String username = auth.getName();
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            Ticket ticket = ticketRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Ticket not found"));
+
+            // Security Check
+            if (!ticket.getCreatedBy().getUserId().equals(user.getUserId())) {
+                return ResponseEntity.status(403).body("Unauthorized: You can only cancel tickets you created.");
+            }
+
+            if (ticket.getStatus() == TicketStatus.IN_PROGRESS || ticket.getStatus() == TicketStatus.RESOLVED) {
+                 return ResponseEntity.badRequest().body("Cannot cancel ticket that is already in progress or resolved.");
+            }
+
+            ticket.setStatus(TicketStatus.CANCELLED);
+            ticket.setClosedAt(LocalDateTime.now());
+            ticketRepository.save(ticket);
+
+            return ResponseEntity.ok(ticket);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error cancelling ticket: " + e.getMessage());
+        }
+    }
+
+    // --- OTHER GETTERS & HELPERS ---
+
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'SUPER_ADMIN', 'ACCOUNT_HEAD')")
+    @GetMapping
+    public ResponseEntity<List<Ticket>> getAllTickets() {
+        return ResponseEntity.ok(ticketService.getAllTickets());
+    }
+
     @GetMapping("/created-by/{userId}")
     public List<Ticket> getTicketsByCreator(@PathVariable Long userId) {
         return ticketRepository.findByCreatedBy_UserIdOrderByCreatedAtDesc(userId);
@@ -119,125 +327,33 @@ public class TicketController {
         return ticketRepository.findByAssignedAdmin_UserIdOrderByCreatedAtDesc(adminId);
     }
 
-    // --- GET RELIABILITY STATS (UPDATED) ---
-    @GetMapping("/reliability")
-    public ResponseEntity<Map<String, Object>> getReliabilityStats() {
-        Map<String, Object> stats = new HashMap<>();
-
-        // 1. Past Due Tickets (Older than 48 hours)
-        LocalDateTime twoDaysAgo = LocalDateTime.now().minusHours(48);
-        long pastDueCount = ticketRepository.countPastDueTickets(twoDaysAgo);
-        stats.put("pastDueTickets", pastDueCount);
-
-        // 2. Total Resolved Tickets
-        stats.put("totalResolved", ticketRepository.findAllResolvedTickets().size());
-
-        // 3. Total Repair Cost
-        Double totalCost = repairRecordRepository.sumTotalCost();
-        stats.put("totalRepairCost", totalCost != null ? totalCost : 0.0);
-
-        // 4. Avg Resolution Time (Hours)
-        // Requires SQL Server Native Query in Repository
-        Double avgTime = ticketRepository.getAverageResolutionTime();
-        stats.put("avgResolutionHours", avgTime != null ? Math.round(avgTime * 10.0) / 10.0 : 0.0);
-
-        // 5. Asset Availability (%)
-        // Requires SQL Server Native Query in Repository
-        Double availability = ticketRepository.calculateAssetAvailability();
-        stats.put("assetAvailability", availability != null ? Math.round(availability) : 100);
-
-        // 6. Top Failing Assets (Using AssetService)
-        List<ReliabilityDTO> reliabilityStats = assetService.getReliabilityStats();
-        
-        // Map DTO to structure expected by Frontend (brand, model, count)
-        List<Map<String, Object>> assetFailures = reliabilityStats.stream().limit(5).map(dto -> {
-            Map<String, Object> map = new HashMap<>();
-            map.put("brand", "N/A"); // DTO focuses on modelName
-            map.put("model", dto.getModelName());
-            map.put("count", dto.getTotalFailures());
-            return map;
-        }).collect(Collectors.toList());
-        
-        stats.put("topFailingAssets", assetFailures);
-
-        return ResponseEntity.ok(stats);
-    }
-
     @GetMapping("/branch/{branchId}")
     public ResponseEntity<List<Ticket>> getBranchTickets(@PathVariable Long branchId) {
         return ResponseEntity.ok(ticketService.getTicketsByBranch(branchId));
     }
 
-    @PreAuthorize("hasAuthority('ADMIN')")
-    @GetMapping
-    public ResponseEntity<List<Ticket>> getAllTickets() {
-        return ResponseEntity.ok(ticketService.getAllTickets());
-    }
-
-    @PreAuthorize("hasAuthority('ADMIN')")
-    @PutMapping("/{id}/start")
-    public ResponseEntity<?> startTicket(@PathVariable Long id, Authentication auth) {
-        String username = auth.getName();
-        User admin = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Admin not found"));
-        
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
-
-        ticket.setAssignedAdmin(admin);
-        ticket.setStatus(TicketStatus.IN_PROGRESS);
-        ticketRepository.save(ticket);
-
-        if (ticket.getAsset() != null) {
-            Asset asset = ticket.getAsset();
-            asset.setStatus("REPAIR");
-            assetRepository.save(asset);
-        }
-
-        notificationService.send(ticket.getCreatedBy(), "Ticket In Progress", "Your ticket #" + id + " is being processed by " + admin.getFullName(), "INFO");
-
-        return ResponseEntity.ok(ticket);
-    }
-
-    @PreAuthorize("hasAuthority('ADMIN')")
-    @PutMapping("/{id}/close")
-    public ResponseEntity<?> closeTicket(@PathVariable Long id, @RequestBody Map<String, Object> payload, Authentication auth) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
-
-        String resolutionDetails = (String) payload.get("resolution");
-        boolean isDisposeRequest = "true".equals(payload.get("disposeAsset").toString());
-
-        BigDecimal cost = BigDecimal.ZERO;
-        if (payload.containsKey("cost") && payload.get("cost") != null) {
-            try {
-                cost = new BigDecimal(payload.get("cost").toString());
-            } catch (Exception e) {
-                System.err.println("Invalid cost format: " + e.getMessage());
-            }
-        }
-
-        ticket.setStatus(TicketStatus.RESOLVED);
-        ticket.setResolvedAt(LocalDateTime.now());
-        ticketRepository.save(ticket);
-
-        if (ticket.getAsset() != null) {
-            Asset asset = ticket.getAsset();
-            if (isDisposeRequest) {
-                asset.setStatus("DISPOSED");
-                assetRepository.save(asset);
-                createRepairRecord(asset, ticket, "ASSET DISPOSED: " + resolutionDetails, cost);
-            } else {
-                asset.setStatus("ACTIVE");
-                asset.setRepairCount(asset.getRepairCount() + 1);
-                assetRepository.save(asset);
-                createRepairRecord(asset, ticket, resolutionDetails, cost);
-            }
-        }
-
-        notificationService.send(ticket.getCreatedBy(), "Ticket Resolved", "Your ticket #" + id + " has been resolved.", "SUCCESS");
-
-        return ResponseEntity.ok(ticket);
+    @GetMapping("/reliability")
+    public ResponseEntity<Map<String, Object>> getReliabilityStats() {
+        Map<String, Object> stats = new HashMap<>();
+        LocalDateTime twoDaysAgo = LocalDateTime.now().minusHours(48);
+        stats.put("pastDueTickets", ticketRepository.countPastDueTickets(twoDaysAgo));
+        stats.put("totalResolved", ticketRepository.findAllResolvedTickets().size());
+        Double totalCost = repairRecordRepository.sumTotalCost();
+        stats.put("totalRepairCost", totalCost != null ? totalCost : 0.0);
+        Double avgTime = ticketRepository.getAverageResolutionTime();
+        stats.put("avgResolutionHours", avgTime != null ? Math.round(avgTime * 10.0) / 10.0 : 0.0);
+        Double availability = ticketRepository.calculateAssetAvailability();
+        stats.put("assetAvailability", availability != null ? Math.round(availability) : 100);
+        List<ReliabilityDTO> reliabilityStats = assetService.getReliabilityStats();
+        List<Map<String, Object>> assetFailures = reliabilityStats.stream().limit(5).map(dto -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("brand", "N/A");
+            map.put("model", dto.getModelName());
+            map.put("count", dto.getTotalFailures());
+            return map;
+        }).collect(Collectors.toList());
+        stats.put("topFailingAssets", assetFailures);
+        return ResponseEntity.ok(stats);
     }
 
     private void createRepairRecord(Asset asset, Ticket ticket, String action, BigDecimal cost) {

@@ -1,50 +1,59 @@
 package com.ntmi.support.config;
 
-import io.jsonwebtoken.*; // Imported for Jwts, Claims, JwtException
+import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Component
 public class JwtUtils {
 
-    // Generate a secure key for signing
-    // Note: Since this is random, every time you restart the server, old tokens will stop working.
-    // In a real production app, you would read this key from application.properties.
-    private final SecretKey key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-    
-    // Token validity (e.g., 24 hours)
-    private final int jwtExpirationMs = 86400000;
+    @Value("${app.jwtSecret}")
+    private String jwtSecretString;
 
-    // 1. Generate Token
+    @Value("${app.jwtExpirationMs}")
+    private int jwtExpirationMs;
+
+    // Explicitly force HS256 (requires 256-bit key, which we have)
+    private SignatureAlgorithm getAlgorithm() {
+        return SignatureAlgorithm.HS256;
+    }
+
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = jwtSecretString.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
     public String generateToken(String username) {
         return Jwts.builder()
                 .setSubject(username)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
-                .signWith(key)
+                .signWith(getSigningKey(), getAlgorithm()) // Force HS256
                 .compact();
     }
 
-    // 2. Get Username from Token (NEEDED FOR FILTER)
     public String getUserNameFromJwtToken(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(key)
+                .setSigningKey(getSigningKey()) 
                 .build()
                 .parseClaimsJws(token)
                 .getBody()
                 .getSubject();
     }
 
-    // 3. Validate Token
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(authToken);
+            Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(authToken);
             return true;
         } catch (JwtException | IllegalArgumentException e) {
-            // Token is invalid, expired, or modified
             System.err.println("Invalid JWT Token: " + e.getMessage());
         }
         return false;

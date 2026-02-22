@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     Container, Paper, Typography, Box, Card, CardContent, 
     Divider, Fade, Button, CircularProgress,
     Dialog, DialogContent, Chip, Stack, IconButton, Tooltip, Alert, 
-    Avatar,
-    Grid // ✅ Use Standard Grid (Safe for all MUI versions)
+    Avatar, Grid, TextField, MenuItem, InputAdornment
 } from '@mui/material';
 
 import { 
     ConfirmationNumber, PendingActions, CheckCircle, Category, 
     Add, Cancel, Download as DownloadIcon, AccessTime, Store, ReportProblem, Close,
-    Build, Computer, Person, Business, Lock
+    Build, Computer, Person, Business, Lock, Timeline, FilterList
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -51,6 +50,10 @@ const BranchDashboard = () => {
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [openDialog, setOpenDialog] = useState(false);
 
+    // --- FILTER STATES ---
+    const [filterStatus, setFilterStatus] = useState('All');
+    const [filterRaisedBy, setFilterRaisedBy] = useState('All');
+
     const branchName = localStorage.getItem('branchName') || 'My Branch';
     const branchId = localStorage.getItem('branchId'); 
 
@@ -69,12 +72,13 @@ const BranchDashboard = () => {
             setStats({
                 total: allTickets.length,
                 open: allTickets.filter(t => t.status === 'OPEN').length,
-                inProgress: allTickets.filter(t => t.status === 'IN_PROGRESS').length,
+                inProgress: allTickets.filter(t => t.status === 'IN_PROGRESS' || t.status === 'APPROVED_FOR_REPAIR').length,
                 resolved: allTickets.filter(t => t.status === 'RESOLVED').length
             });
             
-            // Filter: Hide Resolved/Cancelled
-            const activeTickets = allTickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS');
+            // ✅ FIX: Exclude RESOLVED and CANCELLED tickets from the main view
+            const displayStatuses = ['OPEN', 'PENDING_SUPER_ADMIN', 'PENDING_FINANCE', 'APPROVED_FOR_REPAIR', 'IN_PROGRESS'];
+            const activeTickets = allTickets.filter(t => displayStatuses.includes(t.status));
             const sortedTickets = activeTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setTickets(sortedTickets);
 
@@ -147,10 +151,32 @@ const BranchDashboard = () => {
         document.body.removeChild(link);
     };
 
+    // ✅ EXTRACT UNIQUE USERS FOR FILTER DROPDOWN
+    const raisedByOptions = useMemo(() => {
+        const users = tickets.map(t => t.createdBy?.fullName).filter(Boolean);
+        return [...new Set(users)];
+    }, [tickets]);
+
+    // ✅ APPLY FILTERS
+    const filteredTickets = useMemo(() => {
+        let result = tickets;
+        if (filterStatus !== 'All') {
+            result = result.filter(t => t.status === filterStatus);
+        }
+        if (filterRaisedBy !== 'All') {
+            result = result.filter(t => t.createdBy?.fullName === filterRaisedBy);
+        }
+        return result;
+    }, [tickets, filterStatus, filterRaisedBy]);
+
     const getCardStyles = (ticket) => {
+        if (ticket.status === 'OPEN') return { bg: 'linear-gradient(135deg, #fff1f2 0%, #ffffff 100%)', border: '#fda4af', iconColor: '#e11d48', statusLabel: 'OPEN', statusColor: 'error' };
+        if (ticket.status.includes('PENDING')) return { bg: 'linear-gradient(135deg, #fff7ed 0%, #ffffff 100%)', border: '#fdba74', iconColor: '#ea580c', statusLabel: 'WAITING APPROVAL', statusColor: 'warning' };
+        if (ticket.status === 'APPROVED_FOR_REPAIR') return { bg: 'linear-gradient(135deg, #f3e8ff 0%, #ffffff 100%)', border: '#d8b4fe', iconColor: '#9333ea', statusLabel: 'APPROVED (READY)', statusColor: 'secondary' };
         if (ticket.status === 'IN_PROGRESS') return { bg: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)', border: '#3b82f6', iconColor: '#1d4ed8', statusLabel: 'IN PROGRESS', statusColor: 'primary' };
-        if (ticket.status === 'OPEN') return { bg: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)', border: '#ef4444', iconColor: '#b91c1c', statusLabel: 'OPEN', statusColor: 'error' };
-        return { bg: '#ffffff', border: '#e2e8f0', iconColor: '#64748b', statusLabel: ticket.status, statusColor: 'default' };
+        if (ticket.status === 'RESOLVED') return { bg: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)', border: '#4ade80', iconColor: '#16a34a', statusLabel: 'RESOLVED', statusColor: 'success' };
+        
+        return { bg: '#ffffff', border: '#e2e8f0', iconColor: '#64748b', statusLabel: ticket.status.replace('_', ' '), statusColor: 'default' };
     };
 
     if (loading) return <Box display="flex" justifyContent="center" height="80vh" alignItems="center"><CircularProgress /></Box>;
@@ -201,7 +227,7 @@ const BranchDashboard = () => {
                     </Box>
                 </Paper>
 
-                {/* ✅ UPDATED: Standard Grid with 'item' prop */}
+                {/* KPI CARDS */}
                 <Grid container spacing={3} mb={6}>
                     <Grid item xs={12} sm={6} md={3}><KpiCard title="Total Tickets" value={stats.total} icon={<ConfirmationNumber />} color="#1976d2" subtitle="All Time" /></Grid>
                     <Grid item xs={12} sm={6} md={3}><KpiCard title="Pending Review" value={stats.open} icon={<PendingActions />} color="#d32f2f" subtitle="Awaiting Action" /></Grid>
@@ -209,22 +235,56 @@ const BranchDashboard = () => {
                     <Grid item xs={12} sm={6} md={3}><KpiCard title="Resolved" value={stats.resolved} icon={<CheckCircle />} color="#2e7d32" subtitle="Completed" /></Grid>
                 </Grid>
 
-                <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ mb: 3, color: '#334155' }}>
-                    My Branch Requests (Active)
-                </Typography>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                    <Typography variant="h6" fontWeight="bold" sx={{ color: '#334155' }}>
+                        My Branch Requests (Active)
+                    </Typography>
+                    
+                    {/* FILTERS */}
+                    <Box display="flex" gap={2}>
+                        <TextField 
+                            select 
+                            size="small" 
+                            label="Status" 
+                            value={filterStatus} 
+                            onChange={(e) => setFilterStatus(e.target.value)} 
+                            sx={{ minWidth: 150, bgcolor: 'white', borderRadius: 1 }}
+                            InputProps={{ startAdornment: <InputAdornment position="start"><FilterList fontSize="small" /></InputAdornment> }}
+                        >
+                            <MenuItem value="All">All Active</MenuItem>
+                            <MenuItem value="OPEN">Open</MenuItem>
+                            <MenuItem value="PENDING_SUPER_ADMIN">Pending Director</MenuItem>
+                            <MenuItem value="PENDING_FINANCE">Pending Finance</MenuItem>
+                            <MenuItem value="APPROVED_FOR_REPAIR">Approved</MenuItem>
+                            <MenuItem value="IN_PROGRESS">In Progress</MenuItem>
+                        </TextField>
+
+                        <TextField 
+                            select 
+                            size="small" 
+                            label="Raised By" 
+                            value={filterRaisedBy} 
+                            onChange={(e) => setFilterRaisedBy(e.target.value)} 
+                            sx={{ minWidth: 180, bgcolor: 'white', borderRadius: 1 }}
+                            InputProps={{ startAdornment: <InputAdornment position="start"><Person fontSize="small" /></InputAdornment> }}
+                        >
+                            <MenuItem value="All">All Users</MenuItem>
+                            {raisedByOptions.map(name => <MenuItem key={name} value={name}>{name}</MenuItem>)}
+                        </TextField>
+                    </Box>
+                </Box>
 
                 {/* TICKET GRID */}
-                {tickets.length === 0 ? (
+                {filteredTickets.length === 0 ? (
                     <Box textAlign="center" py={8} bgcolor="#f8fafc" borderRadius={4} border="2px dashed #e2e8f0">
                         <CheckCircle sx={{ fontSize: 60, color: '#22c55e', mb: 2, opacity: 0.5 }} />
-                        <Typography variant="h6" color="textSecondary">No active tickets for this branch.</Typography>
+                        <Typography variant="h6" color="textSecondary">No active tickets match your criteria.</Typography>
                     </Box>
                 ) : (
                     <Grid container spacing={3}>
-                        {tickets.map((ticket) => {
+                        {filteredTickets.map((ticket) => {
                             const styles = getCardStyles(ticket);
                             return (
-                                /* ✅ UPDATED: Standard Grid with 'item' prop */
                                 <Grid item xs={12} sm={6} md={4} lg={3} key={ticket.ticketId} sx={{ display: 'flex' }}>
                                     <Card 
                                         elevation={0}
@@ -287,13 +347,13 @@ const BranchDashboard = () => {
                         <>
                             <Box sx={{ p: 3, borderBottom: '1px solid #e2e8f0', bgcolor: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Box display="flex" alignItems="center" gap={2}>
-                                    <Avatar sx={{ bgcolor: selectedTicket.status === 'OPEN' ? '#fee2e2' : '#dcfce7', color: selectedTicket.status === 'OPEN' ? '#b91c1c' : '#15803d' }}>
-                                        <ReportProblem />
+                                    <Avatar sx={{ bgcolor: selectedTicket.status === 'RESOLVED' ? '#dcfce7' : '#eff6ff', color: selectedTicket.status === 'RESOLVED' ? '#15803d' : '#3b82f6' }}>
+                                        {selectedTicket.status === 'RESOLVED' ? <CheckCircle /> : <ReportProblem />}
                                     </Avatar>
                                     <Box>
                                         <Stack direction="row" alignItems="center" spacing={2}>
                                             <Typography variant="h6" fontWeight="800" color="#0f172a">Ticket #{selectedTicket.ticketId}</Typography>
-                                            <Chip label={selectedTicket.status} color={selectedTicket.status === 'OPEN' ? 'error' : 'success'} size="small" />
+                                            <Chip label={selectedTicket.status.replace(/_/g, ' ')} color={selectedTicket.status === 'RESOLVED' ? 'success' : selectedTicket.status === 'OPEN' ? 'error' : 'primary'} size="small" />
                                         </Stack>
                                         <Typography variant="body2" color="textSecondary">Created by {selectedTicket.createdBy?.fullName}</Typography>
                                     </Box>
@@ -302,7 +362,9 @@ const BranchDashboard = () => {
                             </Box>
 
                             <DialogContent sx={{ p: 0, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, height: '100%' }}>
+                                {/* Left Side: Ticket Details */}
                                 <Box sx={{ flex: 1, p: 4, overflowY: 'auto', borderRight: '1px solid #e2e8f0' }}>
+                                    
                                     <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
                                         <Typography variant="subtitle2" fontWeight="bold">Subject: {selectedTicket.subject}</Typography>
                                     </Alert>
@@ -338,7 +400,7 @@ const BranchDashboard = () => {
 
                                     {selectedTicket.images && selectedTicket.images.length > 0 && (
                                         <Box mb={3}>
-                                            <Typography variant="caption" fontWeight="bold" color="textSecondary" display="block" mb={1}>EVIDENCE</Typography>
+                                            <Typography variant="caption" fontWeight="bold" color="textSecondary" display="block" mb={1}>ATTACHMENTS / EVIDENCE</Typography>
                                             <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 1 }}>
                                                 {selectedTicket.images.map((img, idx) => (
                                                     <Box key={idx} position="relative" sx={{ flexShrink: 0 }}>
@@ -356,11 +418,15 @@ const BranchDashboard = () => {
                                         </Box>
                                     )}
                                 </Box>
-
+                                
+                                {/* Right Side: Chat and Actions */}
                                 <Box sx={{ width: { xs: '100%', md: '400px' }, display: 'flex', flexDirection: 'column', bgcolor: '#f8fafc' }}>
+                                    
+                                    {/* Chat Component */}
                                     <Box sx={{ flex: 1, p: 2, overflowY: 'auto' }}>
                                         <TicketComments ticketId={selectedTicket.ticketId} status={selectedTicket.status} />
                                     </Box>
+                                    
                                     <Box sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: 'white' }}>
                                         {selectedTicket.status === 'OPEN' && (
                                             <Button 

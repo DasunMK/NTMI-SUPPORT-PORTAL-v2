@@ -1,5 +1,6 @@
 package com.ntmi.support.repository;
 
+import com.ntmi.support.model.Asset;
 import com.ntmi.support.model.Ticket;
 import com.ntmi.support.model.TicketStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,6 +17,10 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     // 1. Basic Finders
     List<Ticket> findByBranch_BranchId(Long branchId);
     List<Ticket> findByStatus(TicketStatus status);
+
+    long countByStatus(TicketStatus status);
+
+    List<Ticket> findByAsset(Asset asset);
     
     List<Ticket> findByBranch_BranchIdAndStatusNot(Long branchId, TicketStatus status);
 
@@ -72,6 +77,10 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
               "WHERE status IN ('OPEN', 'IN_PROGRESS')", 
               nativeQuery = true)
        Double calculateAssetAvailability();
+
+
+
+       
 
     
 }
